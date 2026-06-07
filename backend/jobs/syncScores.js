@@ -1,0 +1,191 @@
+// Score sync job — fetches live/finished match results from football-data.org
+// Runs automatically every 5 minutes via node-cron
+// Can also be triggered manually via POST /api/admin/sync
+
+// World Cup 2026 competition ID on football-data.org
+const COMPETITION_ID = 2000;
+
+const fetch = require('node-fetch');
+const pool = require('../db/index');
+const { recalculateMatchPoints } = require('../scoring');
+
+// Country name → ISO 3166-1 alpha-2 code mapping for flag display
+// Used by flagcdn.com: https://flagcdn.com/w40/{code}.png
+const COUNTRY_CODE_MAP = {
+  'Algeria': 'dz', 'Argentina': 'ar', 'Australia': 'au', 'Austria': 'at',
+  'Bahrain': 'bh', 'Belgium': 'be', 'Bolivia': 'bo',
+  'Bosnia-Herzegovina': 'ba', 'Brazil': 'br',
+  'Cameroon': 'cm', 'Canada': 'ca', 'Chile': 'cl', 'Colombia': 'co',
+  'Congo DR': 'cd', 'Costa Rica': 'cr', 'Croatia': 'hr', 'Czechia': 'cz',
+  'Denmark': 'dk',
+  'Ecuador': 'ec', 'Egypt': 'eg', 'El Salvador': 'sv', 'England': 'gb-eng',
+  'France': 'fr',
+  'Georgia': 'ge', 'Germany': 'de', 'Ghana': 'gh', 'Guatemala': 'gt',
+  'Honduras': 'hn', 'Hungary': 'hu',
+  'Indonesia': 'id', 'Iran': 'ir', 'Iraq': 'iq', 'Ivory Coast': 'ci',
+  'Jamaica': 'jm', 'Japan': 'jp', 'Jordan': 'jo',
+  'Kenya': 'ke', 'Kuwait': 'kw',
+  'Libya': 'ly',
+  'Mali': 'ml', 'Mexico': 'mx', 'Morocco': 'ma',
+  'Netherlands': 'nl', 'New Zealand': 'nz', 'Nigeria': 'ng',
+  'Oman': 'om',
+  'Panama': 'pa', 'Paraguay': 'py', 'Peru': 'pe', 'Poland': 'pl', 'Portugal': 'pt',
+  'Qatar': 'qa',
+  'Romania': 'ro',
+  'Saudi Arabia': 'sa', 'Scotland': 'gb-sct', 'Senegal': 'sn', 'Serbia': 'rs',
+  'Slovakia': 'sk', 'Slovenia': 'si', 'South Africa': 'za', 'South Korea': 'kr',
+  'Spain': 'es', 'Switzerland': 'ch',
+  'Thailand': 'th', 'Trinidad and Tobago': 'tt', 'Tunisia': 'tn', 'Turkey': 'tr',
+  'Ukraine': 'ua', 'United Arab Emirates': 'ae', 'United States': 'us', 'Uruguay': 'uy',
+  'Uzbekistan': 'uz',
+  'Venezuela': 've', 'Vietnam': 'vn',
+  'Wales': 'gb-wls',
+  'Zimbabwe': 'zw',
+};
+
+// Use country map first, then fall back to the API's TLA (3-letter code) lowercased
+function getCountryCode(teamName, tla) {
+  if (!teamName || teamName === 'TBD') return null;
+  if (COUNTRY_CODE_MAP[teamName]) return COUNTRY_CODE_MAP[teamName];
+  // TLA like "FRA" → not a valid ISO-2 code, but better than a random slice
+  // Try the first 2 chars of TLA as a last resort
+  if (tla) return tla.slice(0, 2).toLowerCase();
+  return teamName.slice(0, 2).toLowerCase();
+}
+/**
+ * Main sync function — fetches matches from the API and updates the database.
+ * Returns a summary { matchesUpdated, status }
+ */
+async function runSync() {
+  const apiKey = process.env.FOOTBALL_API_KEY;
+  if (!apiKey) {
+    const msg = 'FOOTBALL_API_KEY not set — skipping sync';
+    console.warn(msg);
+    await logSync('skipped', 0, msg);
+    return { status: 'skipped', message: msg };
+  }
+
+  let matchesUpdated = 0;
+  let errorMessage = null;
+
+  try {
+    // Fetch all matches for World Cup 2026 from football-data.org
+    const url = `https://api.football-data.org/v4/competitions/${COMPETITION_ID}/matches`;
+    const response = await fetch(url, {
+      headers: { 'X-Auth-Token': apiKey }
+    });
+
+    if (!response.ok) {
+      throw new Error(`API returned ${response.status}: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    const matches = data.matches || [];
+
+    for (const apiMatch of matches) {
+      const homeTeam = apiMatch.homeTeam?.name || 'TBD';
+      const awayTeam = apiMatch.awayTeam?.name || 'TBD';
+      const homeTla  = apiMatch.homeTeam?.tla;
+      const awayTla  = apiMatch.awayTeam?.tla;
+      const kickoffTime = apiMatch.utcDate;
+      const status = apiMatch.status; // SCHEDULED, TIMED, IN_PLAY, PAUSED, EXTRA_TIME, PENALTY_SHOOTOUT, FINISHED, etc.
+      const stage = apiMatch.stage || apiMatch.round?.name || 'UNKNOWN';
+      const groupName = apiMatch.group || null; // e.g. "GROUP_A", null for knockout matches
+      if (stage === 'GROUP_STAGE' && !groupName) {
+        console.warn(`No group for group-stage match #${apiMatch.id}: ${homeTeam} vs ${awayTeam}`);
+      }
+
+      // Map API stage names to friendly display names
+      const stageDisplay = formatStage(stage);
+
+      // Use fullTime score; during extra time use regularTime so we don't show 0-0 for a live match
+      const homeScore = apiMatch.score?.fullTime?.home ?? null;
+      const awayScore = apiMatch.score?.fullTime?.away ?? null;
+      const homeCode = getCountryCode(homeTeam, homeTla);
+      const awayCode = getCountryCode(awayTeam, awayTla);
+
+      // Check if this match already exists in our DB
+      const existing = await pool.query(
+        'SELECT * FROM matches WHERE api_match_id = $1',
+        [apiMatch.id]
+      );
+
+      if (existing.rows.length === 0) {
+        // Insert new match
+        await pool.query(
+          `INSERT INTO matches
+             (api_match_id, home_team, away_team, home_team_code, away_team_code,
+              kickoff_time, stage, status, home_score, away_score, group_name)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+          [apiMatch.id, homeTeam, awayTeam, homeCode, awayCode,
+           kickoffTime, stageDisplay, status, homeScore, awayScore, groupName]
+        );
+        matchesUpdated++;
+      } else {
+        const existing_match = existing.rows[0];
+        const wasFinished = existing_match.status === 'FINISHED';
+        const isNowFinished = status === 'FINISHED';
+
+        // Update the match — also refreshes team names for knockout matches that start as TBD
+        await pool.query(
+          `UPDATE matches SET
+             home_team = $1, away_team = $2,
+             status = $3, home_score = $4, away_score = $5,
+             home_team_code = $6, away_team_code = $7, stage = $8,
+             kickoff_time = $9, group_name = $10
+           WHERE api_match_id = $11`,
+          [homeTeam, awayTeam, status, homeScore, awayScore,
+           homeCode, awayCode, stageDisplay, kickoffTime, groupName, apiMatch.id]
+        );
+
+        // If match just became FINISHED, recalculate all predictions for it
+        if (!wasFinished && isNowFinished && homeScore !== null && awayScore !== null) {
+          console.log(`Match finished: ${homeTeam} ${homeScore} - ${awayScore} ${awayTeam}`);
+          await recalculateMatchPoints(existing_match.id, { home_score: homeScore, away_score: awayScore });
+          matchesUpdated++;
+        }
+      }
+    }
+
+    console.log(`Sync complete: ${matchesUpdated} matches updated`);
+    await logSync('success', matchesUpdated);
+    return { status: 'success', matchesUpdated };
+
+  } catch (err) {
+    errorMessage = err.message;
+    console.error('Sync error:', err.message);
+    await logSync('error', matchesUpdated, errorMessage);
+    throw err;
+  }
+}
+
+// Convert API stage names to human-friendly display names
+// 2026 World Cup has 48 teams so includes a Round of 32 (LAST_32)
+function formatStage(stage) {
+  const map = {
+    'GROUP_STAGE': 'Group Stage',
+    'LAST_32':     'Round of 32',
+    'LAST_16':     'Round of 16',
+    'ROUND_OF_16': 'Round of 16',
+    'QUARTER_FINALS': 'Quarter-Finals',
+    'SEMI_FINALS': 'Semi-Finals',
+    'THIRD_PLACE': 'Third Place',
+    'FINAL':       'Final',
+  };
+  return map[stage] || stage;
+}
+
+// Write a record to sync_logs table
+async function logSync(status, matchesUpdated, errorMessage = null) {
+  try {
+    await pool.query(
+      `INSERT INTO sync_logs (status, matches_updated, error_message)
+       VALUES ($1, $2, $3)`,
+      [status, matchesUpdated, errorMessage]
+    );
+  } catch (err) {
+    console.error('Failed to write sync log:', err.message);
+  }
+}
+
+module.exports = { runSync };

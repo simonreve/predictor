@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: world_cup_db
+    environment:
+      POSTGRES_USER: predictor_user
+      POSTGRES_PASSWORD: predictor_password
+      POSTGRES_DB: world_cup_2026
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U predictor_user -d world_cup_2026"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: world_cup_backend
+    environment:
+      DATABASE_URL: postgresql://predictor_user:predictor_password@db:5432/world_cup_2026
+      BACKEND_PORT: 3001
+      FOOTBALL_API_KEY: ${FOOTBALL_API_KEY}
+      AUTH_SECRET: ${AUTH_SECRET:-changeme_please_set_in_env}
+      NODE_ENV: ${NODE_ENV:-development}
+    ports:
+      - "3001:3001"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: world_cup_frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+
+volumes:
+  postgres_data:
