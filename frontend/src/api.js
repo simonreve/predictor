@@ -30,6 +30,9 @@ async function request(path, options = {}) {
 export const login = (name, password) =>
   request('/auth/login', { method: 'POST', body: { name, password } });
 
+export const register = (name, password) =>
+  request('/auth/register', { method: 'POST', body: { name, password } });
+
 export const getMe = () => request('/auth/me');
 
 // Matches

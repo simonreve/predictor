@@ -1,21 +1,25 @@
-// Login page — simple name + password form
 import React, { useState } from 'react';
-import { login as apiLogin } from '../api';
+import { register as apiRegister } from '../api';
 import { useAuth } from '../App';
 
-export default function LoginPage({ onShowRegister }) {
+export default function RegisterPage({ onShowLogin }) {
   const { login } = useAuth();
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
+    if (password !== confirm) {
+      setError('Passwords do not match');
+      return;
+    }
     setLoading(true);
     try {
-      const data = await apiLogin(name, password);
+      const data = await apiRegister(name, password);
       login(data.token, data.user);
     } catch (err) {
       setError(err.message);
@@ -36,7 +40,7 @@ export default function LoginPage({ onShowRegister }) {
             World Cup 2026
           </h1>
           <p className="text-muted" style={{ fontSize: 14, marginTop: 4 }}>
-            Predictions Challenge
+            Create your account
           </p>
         </div>
 
@@ -64,7 +68,21 @@ export default function LoginPage({ onShowRegister }) {
               type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
-              placeholder="Your password"
+              placeholder="At least 8 characters"
+              style={{ width: '100%' }}
+              required
+            />
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: 13, color: 'var(--text-muted)', marginBottom: 4 }}>
+              Confirm password
+            </label>
+            <input
+              type="password"
+              value={confirm}
+              onChange={e => setConfirm(e.target.value)}
+              placeholder="Repeat your password"
               style={{ width: '100%' }}
               required
             />
@@ -80,17 +98,17 @@ export default function LoginPage({ onShowRegister }) {
           )}
 
           <button className="btn" type="submit" disabled={loading} style={{ marginTop: 4 }}>
-            {loading ? 'Signing in…' : 'Sign in'}
+            {loading ? 'Creating account…' : 'Create account'}
           </button>
         </form>
 
         <p style={{ textAlign: 'center', marginTop: 16, fontSize: 13, color: 'var(--text-muted)' }}>
-          No account yet?{' '}
+          Already have an account?{' '}
           <button
-            onClick={onShowRegister}
+            onClick={onShowLogin}
             style={{ background: 'none', color: 'var(--accent)', padding: 0, fontSize: 13 }}
           >
-            Create one
+            Sign in
           </button>
         </p>
       </div>

@@ -4,6 +4,7 @@ import { Routes, Route, Navigate, NavLink, useNavigate } from 'react-router-dom'
 import { getMe } from './api';
 
 import LoginPage from './pages/Login';
+import RegisterPage from './pages/Register';
 import MatchesPage from './pages/Matches';
 import LeaderboardPage from './pages/Leaderboard';
 import MyPredictionsPage from './pages/MyPredictions';
@@ -18,6 +19,7 @@ export const useAuth = () => useContext(AuthContext);
 export default function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showRegister, setShowRegister] = useState(false);
 
   // On startup, check if there's a saved token and load the user
   useEffect(() => {
@@ -43,7 +45,12 @@ export default function App() {
 
   return (
     <AuthContext.Provider value={{ user, login, logout }}>
-      {user ? <Layout /> : <LoginPage />}
+      {user
+        ? <Layout />
+        : showRegister
+          ? <RegisterPage onShowLogin={() => setShowRegister(false)} />
+          : <LoginPage onShowRegister={() => setShowRegister(true)} />
+      }
     </AuthContext.Provider>
   );
 }
