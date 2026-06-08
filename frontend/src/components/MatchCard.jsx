@@ -44,7 +44,11 @@ function AccuracyBadge({ prediction, match }) {
 function BonusRow({ q, match, isLocked, value, onChange }) {
   const displayAnswer = (ans) => {
     if (!ans) return '—';
-    if (q.type === 'country') return ans === 'home' ? match.home_team : match.away_team;
+    if (q.type === 'country') {
+      if (ans === 'home') return match.home_team;
+      if (ans === 'away') return match.away_team;
+      if (ans === 'none') return 'Aucune équipe';
+    }
     return ans;
   };
 
@@ -61,8 +65,8 @@ function BonusRow({ q, match, isLocked, value, onChange }) {
 
       {!isLocked ? (
         q.type === 'country' ? (
-          <div style={{ display: 'flex', gap: 6 }}>
-            {['home', 'away'].map(side => (
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {['home', 'away', 'none'].map(side => (
               <button
                 key={side}
                 onClick={() => onChange(side)}
@@ -74,8 +78,12 @@ function BonusRow({ q, match, isLocked, value, onChange }) {
                   cursor: 'pointer', transition: 'all 0.15s',
                 }}
               >
-                <Flag code={side === 'home' ? match.home_team_code : match.away_team_code} name={side === 'home' ? match.home_team : match.away_team} />
-                {' '}{side === 'home' ? match.home_team : match.away_team}
+                {side === 'none' ? 'Aucune' : (
+                  <>
+                    <Flag code={side === 'home' ? match.home_team_code : match.away_team_code} name={side === 'home' ? match.home_team : match.away_team} />
+                    {' '}{side === 'home' ? match.home_team : match.away_team}
+                  </>
+                )}
               </button>
             ))}
           </div>

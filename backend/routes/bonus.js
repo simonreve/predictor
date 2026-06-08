@@ -19,9 +19,9 @@ router.post('/answer', requireAuth, async (req, res) => {
   const trimmed = String(answer).trim();
 
   try {
-    // Load the question and its match kickoff time
+    // Load the question and its match kickoff time + status
     const qRes = await pool.query(
-      `SELECT bq.*, m.kickoff_time
+      `SELECT bq.*, m.kickoff_time, m.status AS match_status
        FROM bonus_questions bq
        JOIN matches m ON m.id = bq.match_id
        WHERE bq.id = $1`,
@@ -30,12 +30,13 @@ router.post('/answer', requireAuth, async (req, res) => {
     const q = qRes.rows[0];
     if (!q) return res.status(404).json({ error: 'Question not found' });
 
-    if (new Date() >= new Date(q.kickoff_time)) {
+    const openStatuses = ['SCHEDULED', 'TIMED'];
+    if (new Date() >= new Date(q.kickoff_time) || !openStatuses.includes(q.match_status)) {
       return res.status(403).json({ error: 'Predictions locked — match has already started' });
     }
 
-    if (q.type === 'country' && !['home', 'away'].includes(trimmed)) {
-      return res.status(400).json({ error: 'Country answer must be "home" or "away"' });
+    if (q.type === 'country' && !['home', 'away', 'none'].includes(trimmed)) {
+      return res.status(400).json({ error: 'Country answer must be "home", "away", or "none"' });
     }
 
     await pool.query(

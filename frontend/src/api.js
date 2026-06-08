@@ -80,3 +80,15 @@ export const adminUpdateScoring = (updates) =>
 export const adminGetPredictions = () => request('/admin/predictions');
 export const adminTriggerSync = () => request('/admin/sync', { method: 'POST' });
 export const adminGetSyncLogs = () => request('/admin/sync-logs');
+
+// Admin — question templates
+export const adminGetQuestionTemplates = () => request('/admin/question-templates');
+export const adminCreateQuestionTemplate = (type, question) =>
+  request('/admin/question-templates', { method: 'POST', body: { type, question } });
+export const adminDeleteQuestionTemplate = (id) =>
+  request(`/admin/question-templates/${id}`, { method: 'DELETE' });
+export const adminAssignTemplates = (match_ids, count_per_match = 1, skip_existing = true) =>
+  request('/admin/question-templates/assign', {
+    method: 'POST',
+    body: { match_ids, count_per_match, skip_existing },
+  });

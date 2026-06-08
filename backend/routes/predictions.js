@@ -44,8 +44,9 @@ router.post('/', requireAuth, async (req, res) => {
       return res.status(404).json({ error: 'Match not found' });
     }
 
-    // Lock predictions once kickoff time has passed
-    if (new Date() >= new Date(match.kickoff_time)) {
+    // Lock predictions once kickoff time has passed OR match is no longer in a pre-game state
+    const openStatuses = ['SCHEDULED', 'TIMED'];
+    if (new Date() >= new Date(match.kickoff_time) || !openStatuses.includes(match.status)) {
       return res.status(403).json({ error: 'Predictions are locked — match has already started' });
     }
 

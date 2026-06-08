@@ -7,6 +7,8 @@ import {
   adminTriggerSync, adminGetSyncLogs,
   adminGetBonusMatches, adminCreateBonusQuestion, adminDeleteBonusQuestion,
   adminSetBonusAnswer, adminGetBonusSubmissions,
+  adminGetQuestionTemplates, adminCreateQuestionTemplate, adminDeleteQuestionTemplate,
+  adminAssignTemplates,
 } from '../api';
 
 export default function AdminPage() {
@@ -368,6 +370,31 @@ function SyncTab() {
 
 /* ─── Bonus tab ─────────────────────────────────────────────────────── */
 function BonusTab() {
+  const [subTab, setSubTab] = useState('matches');
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'flex', gap: 6 }}>
+        {[{ key: 'matches', label: 'Par match' }, { key: 'templates', label: 'Gabarits' }].map(t => (
+          <button
+            key={t.key}
+            onClick={() => setSubTab(t.key)}
+            style={{
+              padding: '5px 14px', borderRadius: 20, fontSize: 13, fontWeight: 500,
+              border: '1px solid var(--border)',
+              background: subTab === t.key ? 'var(--accent)' : 'var(--surface2)',
+              color: subTab === t.key ? '#000' : 'var(--text-muted)',
+            }}
+          >{t.label}</button>
+        ))}
+      </div>
+      {subTab === 'matches'   && <BonusMatchesPanel />}
+      {subTab === 'templates' && <BonusTemplatesPanel />}
+    </div>
+  );
+}
+
+function BonusMatchesPanel() {
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState('');
@@ -388,14 +415,13 @@ function BonusTab() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {/* Match picker */}
       <div className="card">
-        <h3 style={{ marginBottom: 12 }}>Select a match</h3>
+        <h3 style={{ marginBottom: 12 }}>Sélectionner un match</h3>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
           <button
             onClick={() => setStageFilter('all')}
             style={{ padding: '5px 12px', borderRadius: 20, fontSize: 12, fontWeight: 500, border: '1px solid var(--border)', background: stageFilter === 'all' ? 'var(--accent)' : 'var(--surface2)', color: stageFilter === 'all' ? '#000' : 'var(--text-muted)' }}
-          >All</button>
+          >Tous</button>
           {stages.map(s => (
             <button key={s}
               onClick={() => setStageFilter(s)}
@@ -408,7 +434,7 @@ function BonusTab() {
           onChange={e => setSelectedId(e.target.value)}
           style={{ width: '100%', padding: '8px 12px', borderRadius: 8 }}
         >
-          <option value="">— Choose a match —</option>
+          <option value="">— Choisir un match —</option>
           {filtered.map(m => (
             <option key={m.id} value={m.id}>
               {m.home_team} vs {m.away_team}  ·  {m.stage}  ·  {new Date(m.kickoff_time).toLocaleDateString()}
@@ -418,13 +444,212 @@ function BonusTab() {
         </select>
       </div>
 
-      {/* Questions panel for selected match */}
-      {selected && (
-        <MatchBonusPanel
-          match={selected}
-          onRefresh={() => load()}
-        />
-      )}
+      {selected && <MatchBonusPanel match={selected} onRefresh={() => load()} />}
+    </div>
+  );
+}
+
+/* ─── Gabarits de questions ─────────────────────────────────────────── */
+function BonusTemplatesPanel() {
+  const [templates, setTemplates] = useState([]);
+  const [matches, setMatches] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [type, setType] = useState('country');
+  const [question, setQuestion] = useState('');
+  const [adding, setAdding] = useState(false);
+  const [addError, setAddError] = useState('');
+
+  // Assign controls
+  const [stageFilter, setStageFilter] = useState('all');
+  const [selectedMatchIds, setSelectedMatchIds] = useState(new Set());
+  const [countPerMatch, setCountPerMatch] = useState(1);
+  const [skipExisting, setSkipExisting] = useState(true);
+  const [assigning, setAssigning] = useState(false);
+  const [assignResult, setAssignResult] = useState('');
+
+  async function load() {
+    try {
+      const [t, m] = await Promise.all([adminGetQuestionTemplates(), adminGetBonusMatches()]);
+      setTemplates(t);
+      setMatches(m);
+    } catch {}
+    setLoading(false);
+  }
+  useEffect(() => { load(); }, []);
+
+  async function handleAdd(e) {
+    e.preventDefault();
+    if (!question.trim()) return;
+    setAdding(true); setAddError('');
+    try {
+      await adminCreateQuestionTemplate(type, question.trim());
+      setQuestion('');
+      load();
+    } catch (err) { setAddError(err.message); }
+    setAdding(false);
+  }
+
+  async function handleDelete(id) {
+    if (!confirm('Supprimer ce gabarit ?')) return;
+    try { await adminDeleteQuestionTemplate(id); load(); }
+    catch (err) { alert(err.message); }
+  }
+
+  const stages = [...new Set(matches.map(m => m.stage))];
+  const upcomingMatches = matches.filter(m => !['FINISHED', 'CANCELLED', 'POSTPONED'].includes(m.status));
+  const filteredMatches = stageFilter === 'all' ? upcomingMatches : upcomingMatches.filter(m => m.stage === stageFilter);
+
+  function toggleMatch(id) {
+    setSelectedMatchIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    if (selectedMatchIds.size === filteredMatches.length) {
+      setSelectedMatchIds(new Set());
+    } else {
+      setSelectedMatchIds(new Set(filteredMatches.map(m => m.id)));
+    }
+  }
+
+  async function handleAssign() {
+    if (selectedMatchIds.size === 0) return;
+    if (templates.length === 0) { alert('Aucun gabarit disponible.'); return; }
+    setAssigning(true); setAssignResult('');
+    try {
+      const result = await adminAssignTemplates([...selectedMatchIds], countPerMatch, skipExisting);
+      setAssignResult(`✓ ${result.created} question(s) créée(s)${result.skipped ? `, ${result.skipped} match(s) ignoré(s)` : ''}`);
+      setSelectedMatchIds(new Set());
+      load();
+    } catch (err) { setAssignResult('✗ ' + err.message); }
+    setAssigning(false);
+  }
+
+  if (loading) return <div className="spinner" />;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* Template list + add form */}
+      <div className="card">
+        <h3 style={{ marginBottom: 12 }}>Gabarits de questions ({templates.length})</h3>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
+          {templates.length === 0 && (
+            <p className="text-muted" style={{ fontSize: 13 }}>Aucun gabarit. Créez-en ci-dessous.</p>
+          )}
+          {templates.map(t => (
+            <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 8, background: 'var(--surface2)', border: '1px solid var(--border)' }}>
+              <span style={{
+                fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 99,
+                background: t.type === 'country' ? 'rgba(0,212,170,0.15)' : 'rgba(255,107,53,0.15)',
+                color: t.type === 'country' ? 'var(--accent)' : 'var(--accent2)',
+              }}>{t.type === 'country' ? 'ÉQUIPE' : 'JOUEUR'}</span>
+              <span style={{ flex: 1, fontSize: 14 }}>{t.question}</span>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t.type === 'country' ? '+3 pts' : '+5 pts'}</span>
+              <button className="btn btn-danger" onClick={() => handleDelete(t.id)} style={{ padding: '3px 8px', fontSize: 12 }}>✕</button>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+          <h4 style={{ marginBottom: 8, fontSize: 14 }}>Ajouter un gabarit</h4>
+          <form onSubmit={handleAdd} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <select value={type} onChange={e => setType(e.target.value)} style={{ padding: '7px 10px' }}>
+                <option value="country">Équipe (+3 pts)</option>
+                <option value="player">Joueur (+5 pts)</option>
+              </select>
+              <input
+                type="text"
+                placeholder='ex : "Quelle équipe marque en premier ?"'
+                value={question}
+                onChange={e => setQuestion(e.target.value)}
+                style={{ flex: 1, minWidth: 220 }}
+                required
+              />
+            </div>
+            {addError && <p style={{ color: 'var(--red)', fontSize: 13 }}>{addError}</p>}
+            <button className="btn" type="submit" disabled={adding} style={{ alignSelf: 'flex-start' }}>
+              {adding ? 'Ajout…' : 'Ajouter le gabarit'}
+            </button>
+          </form>
+        </div>
+      </div>
+
+      {/* Random assignment */}
+      <div className="card">
+        <h3 style={{ marginBottom: 4 }}>Assignation aléatoire aux matchs</h3>
+        <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>
+          Sélectionnez des matchs et attribuez-leur des questions tirées aléatoirement parmi les gabarits.
+        </p>
+
+        {/* Stage filter */}
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+          <button onClick={() => setStageFilter('all')} style={{ padding: '4px 10px', borderRadius: 20, fontSize: 12, fontWeight: 500, border: '1px solid var(--border)', background: stageFilter === 'all' ? 'var(--accent)' : 'var(--surface2)', color: stageFilter === 'all' ? '#000' : 'var(--text-muted)' }}>Tous</button>
+          {stages.map(s => (
+            <button key={s} onClick={() => setStageFilter(s)} style={{ padding: '4px 10px', borderRadius: 20, fontSize: 12, fontWeight: 500, border: '1px solid var(--border)', background: stageFilter === s ? 'var(--accent)' : 'var(--surface2)', color: stageFilter === s ? '#000' : 'var(--text-muted)' }}>{s}</button>
+          ))}
+        </div>
+
+        {/* Match list with checkboxes */}
+        <div style={{ maxHeight: 260, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 8, marginBottom: 12 }}>
+          <div
+            onClick={toggleAll}
+            style={{ padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', borderBottom: '1px solid var(--border)', background: 'var(--surface2)', fontSize: 13, fontWeight: 600 }}
+          >
+            <input type="checkbox" readOnly checked={filteredMatches.length > 0 && selectedMatchIds.size === filteredMatches.length} style={{ cursor: 'pointer' }} />
+            Tout sélectionner ({filteredMatches.length} matchs à venir)
+          </div>
+          {filteredMatches.map(m => (
+            <div
+              key={m.id}
+              onClick={() => toggleMatch(m.id)}
+              style={{ padding: '7px 12px', display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', borderBottom: '1px solid var(--border)', fontSize: 13, background: selectedMatchIds.has(m.id) ? 'rgba(0,212,170,0.07)' : 'transparent' }}
+            >
+              <input type="checkbox" readOnly checked={selectedMatchIds.has(m.id)} style={{ cursor: 'pointer' }} />
+              <span style={{ flex: 1 }}>{m.home_team} vs {m.away_team}</span>
+              <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{m.stage} · {new Date(m.kickoff_time).toLocaleDateString()}</span>
+              {m.bonus_questions.length > 0 && <span className="badge badge-blue" style={{ fontSize: 10 }}>{m.bonus_questions.length} Q</span>}
+            </div>
+          ))}
+          {filteredMatches.length === 0 && (
+            <p style={{ padding: 12, fontSize: 13, color: 'var(--text-muted)' }}>Aucun match à venir dans cette phase.</p>
+          )}
+        </div>
+
+        {/* Options */}
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+            Questions par match :
+            <input
+              type="number" min="1" max={templates.length || 10} value={countPerMatch}
+              onChange={e => setCountPerMatch(Number(e.target.value))}
+              style={{ width: 56, textAlign: 'center' }}
+            />
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
+            <input type="checkbox" checked={skipExisting} onChange={e => setSkipExisting(e.target.checked)} />
+            Ignorer les matchs qui ont déjà des questions
+          </label>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <button
+            className="btn"
+            onClick={handleAssign}
+            disabled={assigning || selectedMatchIds.size === 0 || templates.length === 0}
+          >
+            {assigning ? 'Assignation…' : `Assigner aléatoirement (${selectedMatchIds.size} match${selectedMatchIds.size > 1 ? 's' : ''})`}
+          </button>
+          {assignResult && (
+            <span style={{ fontSize: 13, color: assignResult.startsWith('✓') ? 'var(--green)' : 'var(--red)' }}>
+              {assignResult}
+            </span>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -530,7 +755,11 @@ function QuestionRow({ q, match, isLocked, onDelete, onRefresh }) {
 
   const displayCorrect = () => {
     if (!q.correct_answer) return null;
-    if (q.type === 'country') return q.correct_answer === 'home' ? match.home_team : match.away_team;
+    if (q.type === 'country') {
+      if (q.correct_answer === 'home') return match.home_team;
+      if (q.correct_answer === 'away') return match.away_team;
+      return 'Aucune équipe';
+    }
     return q.correct_answer;
   };
 
@@ -581,7 +810,7 @@ function QuestionRow({ q, match, isLocked, onDelete, onRefresh }) {
                 {submissions.map(s => (
                   <button
                     key={s.answer}
-                    onClick={() => { setCustomAnswer(q.type === 'country' ? s.answer : s.answer); }}
+                    onClick={() => setCustomAnswer(s.answer)}
                     style={{
                       padding: '5px 12px', borderRadius: 20, fontSize: 13, cursor: 'pointer',
                       border: '1px solid var(--border)',
@@ -590,7 +819,7 @@ function QuestionRow({ q, match, isLocked, onDelete, onRefresh }) {
                     }}
                   >
                     {q.type === 'country'
-                      ? (s.answer === 'home' ? match.home_team : match.away_team)
+                      ? (s.answer === 'home' ? match.home_team : s.answer === 'away' ? match.away_team : 'Aucune équipe')
                       : s.answer
                     }
                     <span style={{ marginLeft: 5, fontSize: 11, opacity: 0.7 }}>×{s.count}</span>
@@ -612,8 +841,8 @@ function QuestionRow({ q, match, isLocked, onDelete, onRefresh }) {
           )}
 
           {q.type === 'country' && (
-            <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
-              {['home', 'away'].map(side => (
+            <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
+              {['home', 'away', 'none'].map(side => (
                 <button
                   key={side}
                   onClick={() => setCustomAnswer(side)}
@@ -624,7 +853,7 @@ function QuestionRow({ q, match, isLocked, onDelete, onRefresh }) {
                     color: customAnswer === side ? '#000' : 'var(--text)',
                   }}
                 >
-                  {side === 'home' ? match.home_team : match.away_team}
+                  {side === 'none' ? 'Aucune équipe' : side === 'home' ? match.home_team : match.away_team}
                 </button>
               ))}
             </div>

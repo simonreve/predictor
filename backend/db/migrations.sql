@@ -76,6 +76,14 @@ CREATE TABLE IF NOT EXISTS scoring_config (
   description TEXT
 );
 
+-- Question templates: admin-defined question pool for random assignment to matches
+CREATE TABLE IF NOT EXISTS question_templates (
+  id           SERIAL PRIMARY KEY,
+  type         VARCHAR(20) NOT NULL CHECK (type IN ('country', 'player')),
+  question     TEXT NOT NULL,
+  created_at   TIMESTAMP DEFAULT NOW()
+);
+
 -- Sync logs table: track each time we called the football-data.org API
 CREATE TABLE IF NOT EXISTS sync_logs (
   id SERIAL PRIMARY KEY,
@@ -96,3 +104,6 @@ INSERT INTO scoring_config (key, value, description) VALUES
   ('points_goal_diff',        3,  'Points for predicting the correct goal difference'),
   ('points_total_goals',      3,  'Points for predicting the correct total goals')
 ON CONFLICT (key) DO NOTHING;
+
+-- Bonus points column added to bonus_answers
+ALTER TABLE bonus_answers ADD COLUMN IF NOT EXISTS points_earned NUMERIC DEFAULT NULL;

@@ -196,20 +196,51 @@ router.delete('/bonus/:id', async (req, res) => {
   }
 });
 
-// PUT /api/admin/bonus/:id/answer — set the correct answer for a question
+// PUT /api/admin/bonus/:id/answer — set the correct answer and award points to users
 // Body: { correct_answer }
 router.put('/bonus/:id/answer', async (req, res) => {
   const { correct_answer } = req.body;
-  if (!correct_answer?.trim()) {
+  if (correct_answer == null || String(correct_answer).trim() === '') {
     return res.status(400).json({ error: 'correct_answer is required' });
   }
+  const trimmed = String(correct_answer).trim();
   try {
     const { rows } = await pool.query(
       `UPDATE bonus_questions SET correct_answer = $1 WHERE id = $2 RETURNING *`,
-      [correct_answer.trim(), req.params.id]
+      [trimmed, req.params.id]
     );
     if (!rows[0]) return res.status(404).json({ error: 'Question not found' });
-    res.json(rows[0]);
+    const q = rows[0];
+
+    // Points: 3 for country questions, 5 for player questions
+    const points = q.type === 'country' ? 3 : 5;
+
+    // Award points to correct answers, 0 to wrong ones
+    if (q.type === 'country') {
+      // Country answers are exact string matches (home/away/none)
+      await pool.query(
+        `UPDATE bonus_answers SET points_earned = $1 WHERE question_id = $2 AND answer = $3`,
+        [points, q.id, trimmed]
+      );
+      await pool.query(
+        `UPDATE bonus_answers SET points_earned = 0 WHERE question_id = $1 AND answer != $2`,
+        [q.id, trimmed]
+      );
+    } else {
+      // Player answers are case-insensitive
+      await pool.query(
+        `UPDATE bonus_answers SET points_earned = $1
+         WHERE question_id = $2 AND LOWER(TRIM(answer)) = LOWER(TRIM($3))`,
+        [points, q.id, trimmed]
+      );
+      await pool.query(
+        `UPDATE bonus_answers SET points_earned = 0
+         WHERE question_id = $1 AND LOWER(TRIM(answer)) != LOWER(TRIM($2))`,
+        [q.id, trimmed]
+      );
+    }
+
+    res.json(q);
   } catch (err) {
     console.error('Set bonus answer error:', err);
     res.status(500).json({ error: 'Server error' });
@@ -231,6 +262,101 @@ router.get('/bonus/:id/submissions', async (req, res) => {
     res.json(rows);
   } catch (err) {
     console.error('Bonus submissions error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ── Question templates ────────────────────────────────────────────────────────
+
+// GET /api/admin/question-templates — list all templates
+router.get('/question-templates', async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT * FROM question_templates ORDER BY type, created_at ASC');
+    res.json(rows);
+  } catch (err) {
+    console.error('List templates error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// POST /api/admin/question-templates — create a template
+// Body: { type, question }
+router.post('/question-templates', async (req, res) => {
+  const { type, question } = req.body;
+  if (!type || !question?.trim()) {
+    return res.status(400).json({ error: 'type and question are required' });
+  }
+  if (!['country', 'player'].includes(type)) {
+    return res.status(400).json({ error: 'type must be country or player' });
+  }
+  try {
+    const { rows } = await pool.query(
+      'INSERT INTO question_templates (type, question) VALUES ($1, $2) RETURNING *',
+      [type, question.trim()]
+    );
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    console.error('Create template error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// DELETE /api/admin/question-templates/:id — delete a template
+router.delete('/question-templates/:id', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM question_templates WHERE id = $1', [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Delete template error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// POST /api/admin/question-templates/assign — randomly assign templates to selected matches
+// Body: { match_ids: number[], count_per_match?: number }
+// Picks `count_per_match` random templates (without replacement within a match) and creates
+// bonus_questions for each selected match. Skips matches that already have questions.
+router.post('/question-templates/assign', async (req, res) => {
+  const { match_ids, count_per_match = 1, skip_existing = false } = req.body;
+  if (!Array.isArray(match_ids) || match_ids.length === 0) {
+    return res.status(400).json({ error: 'match_ids must be a non-empty array' });
+  }
+
+  try {
+    const { rows: templates } = await pool.query('SELECT * FROM question_templates');
+    if (templates.length === 0) {
+      return res.status(400).json({ error: 'No question templates found — create some first' });
+    }
+
+    const n = Math.min(Number(count_per_match) || 1, templates.length);
+    let created = 0;
+    let skipped = 0;
+
+    for (const matchId of match_ids) {
+      if (skip_existing) {
+        const { rows: existing } = await pool.query(
+          'SELECT id FROM bonus_questions WHERE match_id = $1 LIMIT 1',
+          [matchId]
+        );
+        if (existing.length > 0) { skipped++; continue; }
+      }
+
+      // Shuffle templates and pick the first n
+      const shuffled = [...templates].sort(() => Math.random() - 0.5);
+      const picked = shuffled.slice(0, n);
+
+      for (const t of picked) {
+        await pool.query(
+          'INSERT INTO bonus_questions (match_id, type, question) VALUES ($1, $2, $3)',
+          [matchId, t.type, t.question]
+        );
+        created++;
+      }
+    }
+
+    res.json({ ok: true, created, skipped });
+  } catch (err) {
+    console.error('Assign templates error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
