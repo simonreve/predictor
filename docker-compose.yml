@@ -6,10 +6,9 @@ services:
     container_name: world_cup_db
     environment:
       POSTGRES_USER: predictor_user
-      POSTGRES_PASSWORD: predictor_password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: world_cup_2026
-    ports:
-      - "5432:5432"
+    # No public port — backend reaches db:5432 on the internal Docker network
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -24,13 +23,12 @@ services:
       dockerfile: Dockerfile
     container_name: world_cup_backend
     environment:
-      DATABASE_URL: postgresql://predictor_user:predictor_password@db:5432/world_cup_2026
+      DATABASE_URL: postgresql://predictor_user:${POSTGRES_PASSWORD}@db:5432/world_cup_2026
       BACKEND_PORT: 3001
       FOOTBALL_API_KEY: ${FOOTBALL_API_KEY}
-      AUTH_SECRET: ${AUTH_SECRET:-changeme_please_set_in_env}
-      NODE_ENV: ${NODE_ENV:-development}
-    ports:
-      - "3001:3001"
+      AUTH_SECRET: ${AUTH_SECRET}
+      NODE_ENV: ${NODE_ENV:-production}
+    # No public port — Caddy reaches backend:3001 on the internal Docker network
     depends_on:
       db:
         condition: service_healthy
@@ -43,13 +41,29 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: world_cup_frontend
-    ports:
-      - "80:80"
+    # No public port — Caddy proxies to frontend:80 on the internal Docker network
     depends_on:
       - backend
     volumes:
       - ./frontend:/app
       - /app/node_modules
 
+  caddy:
+    image: caddy:2-alpine
+    container_name: world_cup_caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - frontend
+      - backend
+
 volumes:
   postgres_data:
+  caddy_data:
+  caddy_config:

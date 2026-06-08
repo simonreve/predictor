@@ -1,0 +1,3 @@
+revcolevschi.fr, www.revcolevschi.fr {
+    reverse_proxy frontend:80
+}
