@@ -175,6 +175,25 @@ export default function MatchCard({ match, onPredictionSaved }) {
     return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
   }, [homeInput, awayInput, isLocked, match.id, onPredictionSaved]);
 
+  // Save immediately on blur so navigating away never drops a prediction
+  async function handleBlur() {
+    if (!hydrationRef.current || isLocked) return;
+    const h = parseInt(homeInput, 10);
+    const a = parseInt(awayInput, 10);
+    if (isNaN(h) || isNaN(a) || h < 0 || a < 0) return;
+    const sig = `${h}|${a}`;
+    if (sig === lastSavedSigRef.current) return;
+    if (saveTimerRef.current) { clearTimeout(saveTimerRef.current); saveTimerRef.current = null; }
+    setSaving(true); setError('');
+    try {
+      await submitPrediction(match.id, h, a, null, null);
+      lastSavedSigRef.current = sig;
+      setSaved(true); setTimeout(() => setSaved(false), 1500);
+      if (onPredictionSaved) onPredictionSaved();
+    } catch (err) { setError(err.message); }
+    finally { setSaving(false); }
+  }
+
   // Auto-save a bonus answer when it changes
   function handleBonusChange(questionId, value) {
     setBonusAnswers(prev => ({ ...prev, [questionId]: value }));
@@ -223,6 +242,7 @@ export default function MatchCard({ match, onPredictionSaved }) {
               <input
                 type="text" inputMode="numeric" pattern="[0-9]*"
                 value={homeInput} onChange={e => setHomeInput(e.target.value)}
+                onBlur={handleBlur}
                 style={{ width: 44, textAlign: 'center', padding: '6px 4px' }}
                 placeholder="0"
               />
@@ -230,6 +250,7 @@ export default function MatchCard({ match, onPredictionSaved }) {
               <input
                 type="text" inputMode="numeric" pattern="[0-9]*"
                 value={awayInput} onChange={e => setAwayInput(e.target.value)}
+                onBlur={handleBlur}
                 style={{ width: 44, textAlign: 'center', padding: '6px 4px' }}
                 placeholder="0"
               />
