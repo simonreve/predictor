@@ -21,12 +21,52 @@ export default function LeaderboardPage() {
   if (loading) return <div className="page"><div className="spinner" /></div>;
   if (error) return <div className="page"><p style={{ color: 'var(--red)' }}>{error}</p></div>;
 
+  const myRow = rows.find(r => r.id === user.id);
+  const myIndex = myRow ? rows.indexOf(myRow) : -1;
+  const myMedal = myIndex >= 0 ? (MEDAL[myIndex] || null) : null;
+
   return (
     <div className="page">
       <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>Rankings</h1>
       <p className="text-muted" style={{ fontSize: 13, marginBottom: 20 }}>
         Points update automatically when match results come in.
       </p>
+
+      {/* My rank — pinned at top */}
+      {myRow && (
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8 }}>
+            Votre classement
+          </div>
+          <div
+            className="card"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 12,
+              background: 'rgba(0,212,170,0.08)',
+              border: '1px solid rgba(0,212,170,0.4)',
+            }}
+          >
+            <div style={{ width: 36, textAlign: 'center', flexShrink: 0 }}>
+              {myMedal
+                ? <span style={{ fontSize: 22 }}>{myMedal}</span>
+                : <span style={{ fontSize: 18, fontWeight: 700, color: 'var(--accent)' }}>{myRow.rank}</span>
+              }
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 600, fontSize: 16 }}>{myRow.name}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                {myRow.correct_predictions} correct / {myRow.total_predictions} predictions
+              </div>
+            </div>
+            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+              <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--accent)' }}>
+                {Math.round(myRow.total_points)}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>pts</div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {rows.map((row, i) => {

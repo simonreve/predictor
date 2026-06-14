@@ -370,12 +370,12 @@ function SyncTab() {
 
 /* ─── Bonus tab ─────────────────────────────────────────────────────── */
 function BonusTab() {
-  const [subTab, setSubTab] = useState('matches');
+  const [subTab, setSubTab] = useState('pending');
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', gap: 6 }}>
-        {[{ key: 'matches', label: 'Par match' }, { key: 'templates', label: 'Gabarits' }].map(t => (
+        {[{ key: 'pending', label: 'À valider' }, { key: 'matches', label: 'Par match' }, { key: 'templates', label: 'Gabarits' }].map(t => (
           <button
             key={t.key}
             onClick={() => setSubTab(t.key)}
@@ -388,8 +388,69 @@ function BonusTab() {
           >{t.label}</button>
         ))}
       </div>
+      {subTab === 'pending'   && <BonusPendingPanel />}
       {subTab === 'matches'   && <BonusMatchesPanel />}
       {subTab === 'templates' && <BonusTemplatesPanel />}
+    </div>
+  );
+}
+
+/* Questions on finished/locked matches that still have no correct_answer */
+function BonusPendingPanel() {
+  const [matches, setMatches] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  async function load() {
+    try { setMatches(await adminGetBonusMatches()); }
+    catch {}
+    setLoading(false);
+  }
+  useEffect(() => { load(); }, []);
+
+  if (loading) return <div className="spinner" />;
+
+  const now = new Date();
+  // Matches that are finished or past kickoff AND have at least one unanswered question
+  const pending = matches
+    .filter(m => (m.status === 'FINISHED' || new Date(m.kickoff_time) <= now) && m.bonus_questions.length > 0)
+    .map(m => ({ ...m, pending_questions: m.bonus_questions.filter(q => !q.correct_answer) }))
+    .filter(m => m.pending_questions.length > 0);
+
+  if (pending.length === 0) {
+    return (
+      <div className="card" style={{ textAlign: 'center', padding: 32 }}>
+        <p style={{ fontSize: 28, marginBottom: 8 }}>✅</p>
+        <p style={{ fontWeight: 600 }}>Toutes les questions ont une réponse !</p>
+        <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
+          Aucune question en attente de validation.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+        {pending.reduce((acc, m) => acc + m.pending_questions.length, 0)} question(s) en attente sur {pending.length} match(s).
+      </div>
+      {pending.map(m => (
+        <div key={m.id} className="card">
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 12 }}>
+            <h3 style={{ margin: 0, fontSize: 15 }}>{m.home_team} vs {m.away_team}</h3>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{m.stage}</span>
+            {m.status === 'FINISHED' && m.home_score != null && (
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent)' }}>
+                {m.home_score} – {m.away_score}
+              </span>
+            )}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {m.pending_questions.map(q => (
+              <QuestionRow key={q.id} q={q} match={m} isLocked={true} onDelete={() => {}} onRefresh={load} />
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

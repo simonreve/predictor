@@ -28,6 +28,31 @@ function formatGroup(g) {
   return 'Group ' + g.replace('GROUP_', '');
 }
 
+// Compute points breakdown from prediction + match result
+function computeBreakdown(pred, match) {
+  const ph = pred.home_score, pa = pred.away_score;
+  const mh = match.home_score, ma = match.away_score;
+  if (ph == null || pa == null || mh == null || ma == null) return null;
+
+  const predCat = Math.sign(ph - pa);
+  const realCat = Math.sign(mh - ma);
+
+  if (predCat !== realCat) {
+    return { resultCorrect: false, goalDiffCorrect: false, totalGoalsCorrect: false, rawPoints: 0, multiplier: null };
+  }
+
+  const goalDiffCorrect = realCat !== 0 && (ph - pa) === (mh - ma);
+  const totalGoalsCorrect = (ph + pa) === (mh + ma);
+
+  let rawPoints = 5;
+  if (goalDiffCorrect) rawPoints += 3;
+  if (totalGoalsCorrect) rawPoints += 3;
+
+  const multiplier = rawPoints > 0 ? pred.points_earned / rawPoints : 1;
+
+  return { resultCorrect: true, goalDiffCorrect, totalGoalsCorrect, rawPoints, multiplier };
+}
+
 function AccuracyBadge({ prediction, match }) {
   if (match.status !== 'FINISHED' || prediction.points_earned === null) return null;
   const ph = prediction.home_score, pa = prediction.away_score;
@@ -115,6 +140,62 @@ function BonusRow({ q, match, isLocked, value, onChange }) {
   );
 }
 
+// Points breakdown panel shown when user clicks "+"
+function PointsBreakdown({ pred, match }) {
+  const bd = computeBreakdown(pred, match);
+  if (!bd) return null;
+
+  return (
+    <div style={{
+      marginTop: 8,
+      padding: '10px 12px',
+      background: 'var(--surface2)',
+      borderRadius: 8,
+      fontSize: 12,
+    }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <BreakdownRow label="Résultat correct" pts={5} ok={bd.resultCorrect} />
+        {bd.resultCorrect && (
+          <>
+            <BreakdownRow label="Différence de buts" pts={3} ok={bd.goalDiffCorrect} />
+            <BreakdownRow label="Total de buts" pts={3} ok={bd.totalGoalsCorrect} />
+          </>
+        )}
+        {bd.resultCorrect && bd.multiplier != null && (
+          <div style={{ marginTop: 4, paddingTop: 4, borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ color: 'var(--text-muted)' }}>
+              Multiplicateur rareté
+            </span>
+            <span style={{ color: 'var(--accent)', fontWeight: 600 }}>
+              ×{bd.multiplier.toFixed(2)}
+            </span>
+          </div>
+        )}
+        <div style={{ marginTop: 2, paddingTop: 4, borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}>
+          <span>Total</span>
+          <span style={{ color: pred.points_earned > 0 ? 'var(--accent)' : 'var(--text-muted)' }}>
+            {Math.round(pred.points_earned)} pts
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BreakdownRow({ label, pts, ok }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <span style={{ color: ok ? 'var(--text)' : 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
+        <span style={{ color: ok ? 'var(--green)' : 'var(--red)', fontSize: 11 }}>{ok ? '✓' : '✗'}</span>
+        {label}
+      </span>
+      <span style={{ color: ok ? 'var(--text)' : 'var(--text-muted)', fontWeight: ok ? 600 : 400 }}>
+        {ok ? `+${pts}` : '—'}
+      </span>
+    </div>
+  );
+}
+
 export default function MatchCard({ match, onPredictionSaved }) {
   const openStatuses = ['SCHEDULED', 'TIMED'];
   const isLocked = new Date() >= new Date(match.kickoff_time) || !openStatuses.includes(match.status);
@@ -133,6 +214,9 @@ export default function MatchCard({ match, onPredictionSaved }) {
   // Bonus answers state: { [questionId]: answerString }
   const [bonusAnswers, setBonusAnswers] = useState({});
   const bonusTimersRef = useRef({});
+
+  // Points breakdown toggle
+  const [showBreakdown, setShowBreakdown] = useState(false);
 
   // Initialise score inputs from existing prediction
   useEffect(() => {
@@ -231,11 +315,11 @@ export default function MatchCard({ match, onPredictionSaved }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           {match.status === 'FINISHED' ? (
             <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--accent)', minWidth: 60, textAlign: 'center' }}>
-              {match.home_score} – {match.away_score}
+              {match.home_score ?? '-'} – {match.away_score ?? '-'}
             </div>
           ) : isLocked ? (
             <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-muted)', minWidth: 60, textAlign: 'center' }}>
-              {pred ? `${pred.home_score} – ${pred.away_score}` : '— – —'}
+              {pred ? `${pred.home_score ?? '-'} – ${pred.away_score ?? '-'}` : '— – —'}
             </div>
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -244,7 +328,7 @@ export default function MatchCard({ match, onPredictionSaved }) {
                 value={homeInput} onChange={e => setHomeInput(e.target.value)}
                 onBlur={handleBlur}
                 style={{ width: 44, textAlign: 'center', padding: '6px 4px' }}
-                placeholder="0"
+                placeholder="-"
               />
               <span style={{ color: 'var(--text-muted)', fontWeight: 700 }}>–</span>
               <input
@@ -252,7 +336,7 @@ export default function MatchCard({ match, onPredictionSaved }) {
                 value={awayInput} onChange={e => setAwayInput(e.target.value)}
                 onBlur={handleBlur}
                 style={{ width: 44, textAlign: 'center', padding: '6px 4px' }}
-                placeholder="0"
+                placeholder="-"
               />
             </div>
           )}
@@ -294,18 +378,40 @@ export default function MatchCard({ match, onPredictionSaved }) {
 
       {/* Points + accuracy for finished matches */}
       {match.status === 'FINISHED' && pred && (
-        <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8, borderTop: '1px solid var(--border)', paddingTop: 8 }}>
-          <AccuracyBadge prediction={pred} match={match} />
-          {pred.home_score !== null && (
-            <span className="text-muted" style={{ fontSize: 13 }}>
-              Your pick: {pred.home_score} – {pred.away_score}
-            </span>
-          )}
-          {pred.points_earned !== null && (
-            <span style={{ marginLeft: 'auto', fontWeight: 700, color: pred.points_earned > 0 ? 'var(--accent)' : 'var(--text-muted)' }}>
-              {Math.round(pred.points_earned)} pts
-            </span>
-          )}
+        <div style={{ marginTop: 10, borderTop: '1px solid var(--border)', paddingTop: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <AccuracyBadge prediction={pred} match={match} />
+            {pred.home_score !== null && (
+              <span className="text-muted" style={{ fontSize: 13 }}>
+                Votre pronostic : {pred.home_score ?? '-'} – {pred.away_score ?? '-'}
+              </span>
+            )}
+            {pred.points_earned !== null && (
+              <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontWeight: 700, color: pred.points_earned > 0 ? 'var(--accent)' : 'var(--text-muted)' }}>
+                  {Math.round(pred.points_earned)} pts
+                </span>
+                <button
+                  onClick={() => setShowBreakdown(v => !v)}
+                  style={{
+                    width: 20, height: 20,
+                    borderRadius: '50%',
+                    background: showBreakdown ? 'var(--accent)' : 'var(--surface2)',
+                    color: showBreakdown ? '#000' : 'var(--text-muted)',
+                    border: '1px solid var(--border)',
+                    fontSize: 14, fontWeight: 700,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    lineHeight: 1, padding: 0,
+                    transition: 'all 0.15s',
+                  }}
+                  title="Détail des points"
+                >
+                  {showBreakdown ? '−' : '+'}
+                </button>
+              </div>
+            )}
+          </div>
+          {showBreakdown && <PointsBreakdown pred={pred} match={match} />}
         </div>
       )}
     </div>

@@ -81,7 +81,7 @@ export default function GroupStandingsPage() {
               transition: 'all 0.15s',
             }}
           >
-            Group {groupLabel(key)}
+            {groupLabel(key)}
           </button>
         ))}
       </div>
@@ -105,6 +105,7 @@ export default function GroupStandingsPage() {
                 <tr style={{ background: 'var(--surface2)' }}>
                   <th style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--text-muted)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', width: 32 }}>#</th>
                   <th style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--text-muted)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase' }}>Team</th>
+                  <th style={{ padding: '10px 12px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase' }}>Pts</th>
                   <th style={{ padding: '10px 8px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase' }}>P</th>
                   <th style={{ padding: '10px 8px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase' }}>W</th>
                   <th style={{ padding: '10px 8px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase' }}>D</th>
@@ -112,7 +113,6 @@ export default function GroupStandingsPage() {
                   <th style={{ padding: '10px 8px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase' }}>GF</th>
                   <th style={{ padding: '10px 8px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase' }}>GA</th>
                   <th style={{ padding: '10px 8px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase' }}>GD</th>
-                  <th style={{ padding: '10px 12px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase' }}>Pts</th>
                 </tr>
               </thead>
               <tbody>
@@ -143,6 +143,9 @@ export default function GroupStandingsPage() {
                           <span style={{ fontWeight: 600, fontSize: 14 }}>{team.team}</span>
                         </div>
                       </td>
+					  <td style={{ padding: '11px 12px', textAlign: 'center', fontWeight: 700, fontSize: 16, color: qualifies ? 'var(--accent)' : 'var(--text)' }}>
+                        {team.points}
+                      </td>
                       <td style={{ padding: '11px 8px', textAlign: 'center', color: 'var(--text-muted)' }}>{team.played}</td>
                       <td style={{ padding: '11px 8px', textAlign: 'center' }}>{team.won}</td>
                       <td style={{ padding: '11px 8px', textAlign: 'center' }}>{team.drawn}</td>
@@ -152,9 +155,7 @@ export default function GroupStandingsPage() {
                       <td style={{ padding: '11px 8px', textAlign: 'center', color: team.goal_diff > 0 ? 'var(--green)' : team.goal_diff < 0 ? 'var(--red)' : 'var(--text-muted)' }}>
                         {team.goal_diff > 0 ? `+${team.goal_diff}` : team.goal_diff}
                       </td>
-                      <td style={{ padding: '11px 12px', textAlign: 'center', fontWeight: 700, fontSize: 16, color: qualifies ? 'var(--accent)' : 'var(--text)' }}>
-                        {team.points}
-                      </td>
+                      
                     </tr>
                   );
                 })}
