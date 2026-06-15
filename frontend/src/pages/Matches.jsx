@@ -37,8 +37,9 @@ export default function MatchesPage() {
   const load = useCallback(async () => {
     try {
       const data = await getMatches();
-      setMatches(data.matches);
-      setScoringConfig(data.scoringConfig);
+      const matchList = Array.isArray(data) ? data : (data.matches ?? []);
+      setMatches(matchList);
+      setScoringConfig(Array.isArray(data) ? null : (data.scoringConfig ?? null));
     } catch (err) {
       setError(err.message);
     } finally {
