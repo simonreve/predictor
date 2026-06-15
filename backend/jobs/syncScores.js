@@ -138,9 +138,13 @@ async function runSync() {
            homeCode, awayCode, stageDisplay, kickoffTime, groupName, apiMatch.id]
         );
 
-        // If match just became FINISHED, recalculate all predictions for it
+        // If match just became FINISHED, record finish time and recalculate points
         if (!wasFinished && isNowFinished && homeScore !== null && awayScore !== null) {
           console.log(`Match finished: ${homeTeam} ${homeScore} - ${awayScore} ${awayTeam}`);
+          await pool.query(
+            'UPDATE matches SET finished_at = NOW() WHERE id = $1',
+            [existing_match.id]
+          );
           await recalculateMatchPoints(existing_match.id, { home_score: homeScore, away_score: awayScore });
           matchesUpdated++;
         }

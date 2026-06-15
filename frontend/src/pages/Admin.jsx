@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   adminGetUsers, adminCreateUser, adminDeleteUser, adminChangePassword,
-  adminGetScoring, adminUpdateScoring,
+  adminGetScoring, adminUpdateScoring, adminRecalculate,
   adminTriggerSync, adminGetSyncLogs,
   adminGetBonusMatches, adminCreateBonusQuestion, adminDeleteBonusQuestion,
   adminSetBonusAnswer, adminGetBonusSubmissions,
@@ -178,6 +178,8 @@ function ScoringTab() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState('');
+  const [recalculating, setRecalculating] = useState(false);
+  const [recalcResult, setRecalcResult] = useState('');
 
   useEffect(() => {
     adminGetScoring().then(rows => {
@@ -280,6 +282,35 @@ function ScoringTab() {
             {saving ? 'Saving…' : 'Save config'}
           </button>
           {success && <span style={{ color: 'var(--green)', fontSize: 13 }}>{success}</span>}
+        </div>
+
+        <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 10 }}>
+            Après avoir modifié les valeurs ci-dessus, recalcule les points de tous les matchs terminés.
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <button
+              className="btn btn-secondary"
+              onClick={async () => {
+                setRecalculating(true); setRecalcResult('');
+                try {
+                  const r = await adminRecalculate();
+                  setRecalcResult(`✓ ${r.matchesProcessed} match(s) recalculé(s) — ${r.predictionsUpdated} prédictions mises à jour`);
+                } catch (err) {
+                  setRecalcResult('✗ Erreur : ' + err.message);
+                }
+                setRecalculating(false);
+              }}
+              disabled={recalculating}
+            >
+              {recalculating ? 'Recalcul en cours…' : '🔄 Recalculer tous les points'}
+            </button>
+            {recalcResult && (
+              <span style={{ fontSize: 13, color: recalcResult.startsWith('✓') ? 'var(--green)' : 'var(--red)' }}>
+                {recalcResult}
+              </span>
+            )}
+          </div>
         </div>
       </div>
     </div>

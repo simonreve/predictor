@@ -14,6 +14,7 @@ const bcrypt = require('bcryptjs');
 const pool = require('../db/index');
 const { requireAdmin } = require('../middleware/auth');
 const { runSync } = require('../jobs/syncScores');
+const { recalculateMatchPoints, recalculateAllPoints } = require('../scoring');
 
 const router = express.Router();
 
@@ -196,7 +197,7 @@ router.delete('/bonus/:id', async (req, res) => {
   }
 });
 
-// PUT /api/admin/bonus/:id/answer — set the correct answer and award points to users
+// PUT /api/admin/bonus/:id/answer — set the correct answer, award bonus points, recalculate totals
 // Body: { correct_answer }
 router.put('/bonus/:id/answer', async (req, res) => {
   const { correct_answer } = req.body;
@@ -217,7 +218,6 @@ router.put('/bonus/:id/answer', async (req, res) => {
 
     // Award points to correct answers, 0 to wrong ones
     if (q.type === 'country') {
-      // Country answers are exact string matches (home/away/none)
       await pool.query(
         `UPDATE bonus_answers SET points_earned = $1 WHERE question_id = $2 AND answer = $3`,
         [points, q.id, trimmed]
@@ -227,7 +227,6 @@ router.put('/bonus/:id/answer', async (req, res) => {
         [q.id, trimmed]
       );
     } else {
-      // Player answers are case-insensitive
       await pool.query(
         `UPDATE bonus_answers SET points_earned = $1
          WHERE question_id = $2 AND LOWER(TRIM(answer)) = LOWER(TRIM($3))`,
@@ -240,9 +239,31 @@ router.put('/bonus/:id/answer', async (req, res) => {
       );
     }
 
+    // Recalculate predictions.points_earned for this match (score × multiplier + bonus)
+    const { rows: matchRows } = await pool.query(
+      'SELECT home_score, away_score FROM matches WHERE id = $1', [q.match_id]
+    );
+    const match = matchRows[0];
+    if (match?.home_score != null && match?.away_score != null) {
+      await recalculateMatchPoints(q.match_id, { home_score: match.home_score, away_score: match.away_score });
+    }
+
     res.json(q);
   } catch (err) {
     console.error('Set bonus answer error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// POST /api/admin/recalculate — recalculate points_earned for all finished matches
+// Useful after changing scoring config values
+router.post('/recalculate', async (req, res) => {
+  try {
+    const result = await recalculateAllPoints();
+    console.log(`Recalculate: ${result.matchesProcessed} matches, ${result.predictionsUpdated} predictions updated`);
+    res.json(result);
+  } catch (err) {
+    console.error('Recalculate error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });

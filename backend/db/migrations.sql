@@ -107,3 +107,9 @@ ON CONFLICT (key) DO NOTHING;
 
 -- Bonus points column added to bonus_answers
 ALTER TABLE bonus_answers ADD COLUMN IF NOT EXISTS points_earned NUMERIC DEFAULT NULL;
+
+-- Track exact finish time (set when status transitions to FINISHED)
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS finished_at TIMESTAMPTZ;
+
+-- Track when the AI bonus job was run for a match (prevents re-triggering)
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS bonus_ai_triggered_at TIMESTAMPTZ;

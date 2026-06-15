@@ -28,8 +28,19 @@ function formatGroup(g) {
   return 'Group ' + g.replace('GROUP_', '');
 }
 
-// Compute points breakdown from prediction + match result
-function computeBreakdown(pred, match) {
+// Compute bonus points earned from bonus questions data
+function computeBonusPoints(bonusQuestions) {
+  return (bonusQuestions || []).reduce((sum, q) => {
+    if (!q.correct_answer || q.my_answer == null) return sum;
+    const correct = q.type === 'country'
+      ? q.my_answer === q.correct_answer
+      : q.my_answer.trim().toLowerCase() === q.correct_answer.trim().toLowerCase();
+    return sum + (correct ? (q.type === 'country' ? 3 : 5) : 0);
+  }, 0);
+}
+
+// Compute score breakdown from prediction + match result (excludes bonus)
+function computeBreakdown(pred, match, bonusPoints) {
   const ph = pred.home_score, pa = pred.away_score;
   const mh = match.home_score, ma = match.away_score;
   if (ph == null || pa == null || mh == null || ma == null) return null;
@@ -38,7 +49,7 @@ function computeBreakdown(pred, match) {
   const realCat = Math.sign(mh - ma);
 
   if (predCat !== realCat) {
-    return { resultCorrect: false, goalDiffCorrect: false, totalGoalsCorrect: false, rawPoints: 0, multiplier: null };
+    return { resultCorrect: false, goalDiffCorrect: false, totalGoalsCorrect: false, rawPoints: 0, multiplier: null, bonusPoints };
   }
 
   const goalDiffCorrect = realCat !== 0 && (ph - pa) === (mh - ma);
@@ -48,9 +59,11 @@ function computeBreakdown(pred, match) {
   if (goalDiffCorrect) rawPoints += 3;
   if (totalGoalsCorrect) rawPoints += 3;
 
-  const multiplier = rawPoints > 0 ? pred.points_earned / rawPoints : 1;
+  // score_points = total - bonus; multiplier = score_points / rawPoints
+  const scorePoints = pred.points_earned - bonusPoints;
+  const multiplier = rawPoints > 0 ? scorePoints / rawPoints : 1;
 
-  return { resultCorrect: true, goalDiffCorrect, totalGoalsCorrect, rawPoints, multiplier };
+  return { resultCorrect: true, goalDiffCorrect, totalGoalsCorrect, rawPoints, multiplier, bonusPoints };
 }
 
 function AccuracyBadge({ prediction, match }) {
@@ -141,9 +154,12 @@ function BonusRow({ q, match, isLocked, value, onChange }) {
 }
 
 // Points breakdown panel shown when user clicks "+"
-function PointsBreakdown({ pred, match }) {
-  const bd = computeBreakdown(pred, match);
+function PointsBreakdown({ pred, match, bonusQuestions }) {
+  const bonusPoints = computeBonusPoints(bonusQuestions);
+  const bd = computeBreakdown(pred, match, bonusPoints);
   if (!bd) return null;
+
+  const scorePoints = pred.points_earned - bonusPoints;
 
   return (
     <div style={{
@@ -162,13 +178,21 @@ function PointsBreakdown({ pred, match }) {
           </>
         )}
         {bd.resultCorrect && bd.multiplier != null && (
-          <div style={{ marginTop: 4, paddingTop: 4, borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ color: 'var(--text-muted)' }}>
-              Multiplicateur rareté
-            </span>
-            <span style={{ color: 'var(--accent)', fontWeight: 600 }}>
-              ×{bd.multiplier.toFixed(2)}
-            </span>
+          <div style={{ paddingTop: 4, marginTop: 2, borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ color: 'var(--text-muted)' }}>Multiplicateur rareté</span>
+            <span style={{ color: 'var(--accent)', fontWeight: 600 }}>×{bd.multiplier.toFixed(2)}</span>
+          </div>
+        )}
+        {bd.resultCorrect && (
+          <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
+            <span>Sous-total score</span>
+            <span>{Math.round(scorePoints)} pts</span>
+          </div>
+        )}
+        {bonusPoints > 0 && (
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ color: 'var(--text-muted)' }}>Bonus questions</span>
+            <span style={{ color: 'var(--accent2)', fontWeight: 600 }}>+{bonusPoints} pts</span>
           </div>
         )}
         <div style={{ marginTop: 2, paddingTop: 4, borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}>
@@ -411,7 +435,7 @@ export default function MatchCard({ match, onPredictionSaved }) {
               </div>
             )}
           </div>
-          {showBreakdown && <PointsBreakdown pred={pred} match={match} />}
+          {showBreakdown && <PointsBreakdown pred={pred} match={match} bonusQuestions={bonusQuestions} />}
         </div>
       )}
     </div>

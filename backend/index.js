@@ -8,6 +8,7 @@ const cron = require('node-cron');
 
 const runMigrations = require('./db/migrate');
 const { runSync } = require('./jobs/syncScores');
+const { runBonusAi } = require('./jobs/runBonusAi');
 
 const authRoutes = require('./routes/auth');
 const matchRoutes = require('./routes/matches');
@@ -51,13 +52,21 @@ async function start() {
   });
 
   // Run score sync every 5 minutes
-  // This fetches live/finished match results from football-data.org
   cron.schedule('*/5 * * * *', async () => {
     console.log('Running scheduled score sync...');
     try {
       await runSync();
     } catch (err) {
       console.error('Scheduled sync failed:', err.message);
+    }
+  });
+
+  // Check every 5 minutes if any match finished 1h+ ago and has unanswered bonus questions
+  cron.schedule('*/5 * * * *', async () => {
+    try {
+      await runBonusAi();
+    } catch (err) {
+      console.error('Bonus AI job failed:', err.message);
     }
   });
 

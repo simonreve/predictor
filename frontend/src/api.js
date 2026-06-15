@@ -80,6 +80,8 @@ export const adminChangePassword = (id, password) =>
 export const adminGetScoring = () => request('/admin/scoring');
 export const adminUpdateScoring = (updates) =>
   request('/admin/scoring', { method: 'PUT', body: updates });
+export const adminRecalculate = () =>
+  request('/admin/recalculate', { method: 'POST' });
 export const adminGetPredictions = () => request('/admin/predictions');
 export const adminTriggerSync = () => request('/admin/sync', { method: 'POST' });
 export const adminGetSyncLogs = () => request('/admin/sync-logs');
