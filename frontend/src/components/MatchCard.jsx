@@ -28,40 +28,27 @@ function formatGroup(g) {
   return 'Group ' + g.replace('GROUP_', '');
 }
 
-// Compute bonus points earned from bonus questions data
-function computeBonusPoints(bonusQuestions) {
-  return (bonusQuestions || []).reduce((sum, q) => {
-    if (!q.correct_answer || q.my_answer == null) return sum;
-    const correct = q.type === 'country'
-      ? q.my_answer === q.correct_answer
-      : q.my_answer.trim().toLowerCase() === q.correct_answer.trim().toLowerCase();
-    return sum + (correct ? (q.type === 'country' ? 3 : 5) : 0);
-  }, 0);
-}
-
-// Compute score breakdown from prediction + match result (excludes bonus)
-function computeBreakdown(pred, match, bonusPoints) {
+// Build breakdown solely from server-stored fields — no recomputation needed
+function computeBreakdown(pred, match) {
   const ph = pred.home_score, pa = pred.away_score;
   const mh = match.home_score, ma = match.away_score;
   if (ph == null || pa == null || mh == null || ma == null) return null;
 
   const predCat = Math.sign(ph - pa);
   const realCat = Math.sign(mh - ma);
+  const resultCorrect = predCat === realCat;
 
-  if (predCat !== realCat) {
-    return { resultCorrect: false, goalDiffCorrect: false, totalGoalsCorrect: false, rawPoints: 0, multiplier: null, bonusPoints };
+  if (!resultCorrect) {
+    return { resultCorrect: false, goalDiffCorrect: false, totalGoalsCorrect: false };
   }
 
   const goalDiffCorrect = realCat !== 0 && (ph - pa) === (mh - ma);
   const totalGoalsCorrect = (ph + pa) === (mh + ma);
 
-  let rawPoints = 5;
-  if (goalDiffCorrect) rawPoints += 3;
-  if (totalGoalsCorrect) rawPoints += 3;
-
-  // score_points = total - bonus; multiplier = score_points / rawPoints
-  const scorePoints = pred.points_earned - bonusPoints;
-  const multiplier = rawPoints > 0 ? scorePoints / rawPoints : 1;
+  // Use server-stored values if available, otherwise fall back to estimation
+  const rawPoints    = pred.score_raw_points   != null ? Number(pred.score_raw_points)   : null;
+  const multiplier   = pred.score_multiplier   != null ? Number(pred.score_multiplier)   : null;
+  const bonusPoints  = pred.bonus_points_earned != null ? Number(pred.bonus_points_earned) : null;
 
   return { resultCorrect: true, goalDiffCorrect, totalGoalsCorrect, rawPoints, multiplier, bonusPoints };
 }
@@ -154,12 +141,13 @@ function BonusRow({ q, match, isLocked, value, onChange }) {
 }
 
 // Points breakdown panel shown when user clicks "+"
-function PointsBreakdown({ pred, match, bonusQuestions }) {
-  const bonusPoints = computeBonusPoints(bonusQuestions);
-  const bd = computeBreakdown(pred, match, bonusPoints);
+function PointsBreakdown({ pred, match }) {
+  const bd = computeBreakdown(pred, match);
   if (!bd) return null;
 
-  const scorePoints = pred.points_earned - bonusPoints;
+  const scorePoints = bd.rawPoints != null && bd.multiplier != null
+    ? Math.round(bd.rawPoints * bd.multiplier)
+    : null;
 
   return (
     <div style={{
@@ -170,29 +158,25 @@ function PointsBreakdown({ pred, match, bonusQuestions }) {
       fontSize: 12,
     }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <BreakdownRow label="Résultat correct" pts={5} ok={bd.resultCorrect} />
-        {bd.resultCorrect && (
-          <>
-            <BreakdownRow label="Différence de buts" pts={3} ok={bd.goalDiffCorrect} />
-            <BreakdownRow label="Total de buts" pts={3} ok={bd.totalGoalsCorrect} />
-          </>
-        )}
+        <BreakdownRow label="Résultat correct" pts={bd.rawPoints != null ? bd.rawPoints - (bd.goalDiffCorrect ? 3 : 0) - (bd.totalGoalsCorrect ? 3 : 0) : null} ok={bd.resultCorrect} />
+        {bd.resultCorrect && <BreakdownRow label="Différence de buts" pts={3} ok={bd.goalDiffCorrect} />}
+        {bd.resultCorrect && <BreakdownRow label="Total de buts" pts={3} ok={bd.totalGoalsCorrect} />}
         {bd.resultCorrect && bd.multiplier != null && (
           <div style={{ paddingTop: 4, marginTop: 2, borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between' }}>
             <span style={{ color: 'var(--text-muted)' }}>Multiplicateur rareté</span>
             <span style={{ color: 'var(--accent)', fontWeight: 600 }}>×{bd.multiplier.toFixed(2)}</span>
           </div>
         )}
-        {bd.resultCorrect && (
+        {bd.resultCorrect && scorePoints != null && (
           <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
             <span>Sous-total score</span>
-            <span>{Math.round(scorePoints)} pts</span>
+            <span>{scorePoints} pts</span>
           </div>
         )}
-        {bonusPoints > 0 && (
+        {bd.bonusPoints != null && bd.bonusPoints > 0 && (
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <span style={{ color: 'var(--text-muted)' }}>Bonus questions</span>
-            <span style={{ color: 'var(--accent2)', fontWeight: 600 }}>+{bonusPoints} pts</span>
+            <span style={{ color: 'var(--accent2)', fontWeight: 600 }}>+{bd.bonusPoints} pts</span>
           </div>
         )}
         <div style={{ marginTop: 2, paddingTop: 4, borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}>
@@ -206,6 +190,7 @@ function PointsBreakdown({ pred, match, bonusQuestions }) {
   );
 }
 
+// Renders a single breakdown line: "✓ Résultat correct  +8 pts" or "✗ Total de buts  —"
 function BreakdownRow({ label, pts, ok }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -214,7 +199,7 @@ function BreakdownRow({ label, pts, ok }) {
         {label}
       </span>
       <span style={{ color: ok ? 'var(--text)' : 'var(--text-muted)', fontWeight: ok ? 600 : 400 }}>
-        {ok ? `+${pts}` : '—'}
+        {ok && pts != null ? `+${pts}` : '—'}
       </span>
     </div>
   );
