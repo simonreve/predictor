@@ -29,6 +29,7 @@ const stageOrder = ['Group Stage', 'Round of 32', 'Round of 16', 'Quarter-Finals
 
 export default function MatchesPage() {
   const [matches, setMatches] = useState([]);
+  const [scoringConfig, setScoringConfig] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState(null);
@@ -36,7 +37,8 @@ export default function MatchesPage() {
   const load = useCallback(async () => {
     try {
       const data = await getMatches();
-      setMatches(data);
+      setMatches(data.matches);
+      setScoringConfig(data.scoringConfig);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -156,7 +158,7 @@ export default function MatchesPage() {
               {day}
             </div>
             {dayMatches.map(match => (
-              <MatchCard key={match.id} match={match} onPredictionSaved={load} />
+              <MatchCard key={match.id} match={match} onPredictionSaved={load} scoringConfig={scoringConfig} />
             ))}
           </div>
         ))
