@@ -28,31 +28,6 @@ function formatGroup(g) {
   return 'Group ' + g.replace('GROUP_', '');
 }
 
-// Build breakdown booleans from score fields; always include bonusPoints even if result wrong
-function computeBreakdown(pred, match) {
-  const bonusPoints = pred.bonus_points_earned != null ? Number(pred.bonus_points_earned) : 0;
-
-  const ph = pred.home_score, pa = pred.away_score;
-  const mh = match.home_score, ma = match.away_score;
-  if (ph == null || pa == null || mh == null || ma == null) {
-    return { resultCorrect: false, goalDiffCorrect: false, totalGoalsCorrect: false, rawPoints: null, multiplier: null, bonusPoints };
-  }
-
-  const predCat = Math.sign(ph - pa);
-  const realCat = Math.sign(mh - ma);
-  const resultCorrect = predCat === realCat;
-
-  if (!resultCorrect) {
-    return { resultCorrect: false, goalDiffCorrect: false, totalGoalsCorrect: false, rawPoints: null, multiplier: null, bonusPoints };
-  }
-
-  const goalDiffCorrect = realCat !== 0 && (ph - pa) === (mh - ma);
-  const totalGoalsCorrect = (ph + pa) === (mh + ma);
-  const rawPoints  = pred.score_raw_points  != null ? Number(pred.score_raw_points)  : null;
-  const multiplier = pred.score_multiplier  != null ? Number(pred.score_multiplier)  : null;
-
-  return { resultCorrect: true, goalDiffCorrect, totalGoalsCorrect, rawPoints, multiplier, bonusPoints };
-}
 
 function AccuracyBadge({ prediction, match }) {
   if (match.status !== 'FINISHED' || prediction.points_earned === null) return null;
@@ -142,46 +117,52 @@ function BonusRow({ q, match, isLocked, value, onChange }) {
 }
 
 // Points breakdown panel shown when user clicks "+"
-function PointsBreakdown({ pred, match, scoringConfig }) {
-  const cfg = {
-    pointsResult:     scoringConfig?.pointsResult     ?? 5,
-    pointsGoalDiff:   scoringConfig?.pointsGoalDiff   ?? 3,
-    pointsTotalGoals: scoringConfig?.pointsTotalGoals ?? 3,
-  };
-  const bd = computeBreakdown(pred, match);
+// Reads score_breakdown (stored at scoring time) so values always match backend truth.
+function PointsBreakdown({ pred }) {
+  const sb = pred.score_breakdown; // { result_points, goal_diff_points, total_goals_points } | null
+  const bonusPoints  = pred.bonus_points_earned != null ? Number(pred.bonus_points_earned) : 0;
+  const multiplier   = pred.score_multiplier    != null ? Number(pred.score_multiplier)    : null;
+  const rawPoints    = pred.score_raw_points    != null ? Number(pred.score_raw_points)    : null;
+  const scorePoints  = rawPoints != null && multiplier != null ? Math.round(rawPoints * multiplier) : null;
 
-  const scorePoints = bd.rawPoints != null && bd.multiplier != null
-    ? Math.round(bd.rawPoints * bd.multiplier)
-    : null;
+  const resultCorrect    = sb != null && sb.result_points     > 0;
+  const goalDiffCorrect  = sb != null && sb.goal_diff_points  > 0;
+  const totalGoalsCorrect = sb != null && sb.total_goals_points > 0;
 
   return (
-    <div style={{
-      marginTop: 8,
-      padding: '10px 12px',
-      background: 'var(--surface2)',
-      borderRadius: 8,
-      fontSize: 12,
-    }}>
+    <div style={{ marginTop: 8, padding: '10px 12px', background: 'var(--surface2)', borderRadius: 8, fontSize: 12 }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <BreakdownRow label="Résultat correct" pts={cfg.pointsResult} ok={bd.resultCorrect} />
-        {bd.resultCorrect && <BreakdownRow label="Différence de buts" pts={cfg.pointsGoalDiff} ok={bd.goalDiffCorrect} />}
-        {bd.resultCorrect && <BreakdownRow label="Total de buts" pts={cfg.pointsTotalGoals} ok={bd.totalGoalsCorrect} />}
-        {bd.resultCorrect && bd.multiplier != null && (
-          <div style={{ paddingTop: 4, marginTop: 2, borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ color: 'var(--text-muted)' }}>Multiplicateur rareté</span>
-            <span style={{ color: 'var(--accent)', fontWeight: 600 }}>×{bd.multiplier.toFixed(2)}</span>
-          </div>
+        {sb != null ? (
+          <>
+            <BreakdownRow label="Résultat correct"    pts={sb.result_points}     ok={resultCorrect} />
+            {resultCorrect && <BreakdownRow label="Différence de buts" pts={sb.goal_diff_points}  ok={goalDiffCorrect} />}
+            {resultCorrect && <BreakdownRow label="Total de buts"      pts={sb.total_goals_points} ok={totalGoalsCorrect} />}
+            {resultCorrect && multiplier != null && (
+              <div style={{ paddingTop: 4, marginTop: 2, borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Multiplicateur rareté</span>
+                <span style={{ color: 'var(--accent)', fontWeight: 600 }}>×{multiplier.toFixed(2)}</span>
+              </div>
+            )}
+            {resultCorrect && scorePoints != null && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
+                <span>Sous-total score</span>
+                <span>{scorePoints} pts</span>
+              </div>
+            )}
+          </>
+        ) : (
+          // Fallback for predictions scored before score_breakdown was added
+          scorePoints != null && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
+              <span>Sous-total score</span>
+              <span>{scorePoints} pts</span>
+            </div>
+          )
         )}
-        {bd.resultCorrect && scorePoints != null && (
-          <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
-            <span>Sous-total score</span>
-            <span>{scorePoints} pts</span>
-          </div>
-        )}
-        {bd.bonusPoints > 0 && (
+        {bonusPoints > 0 && (
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <span style={{ color: 'var(--text-muted)' }}>Bonus questions</span>
-            <span style={{ color: 'var(--accent2)', fontWeight: 600 }}>+{bd.bonusPoints} pts</span>
+            <span style={{ color: 'var(--accent2)', fontWeight: 600 }}>+{bonusPoints} pts</span>
           </div>
         )}
         <div style={{ marginTop: 2, paddingTop: 4, borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}>
@@ -425,7 +406,7 @@ export default function MatchCard({ match, onPredictionSaved, scoringConfig }) {
               </div>
             )}
           </div>
-          {showBreakdown && <PointsBreakdown pred={pred} match={match} scoringConfig={scoringConfig} />}
+          {showBreakdown && <PointsBreakdown pred={pred} />}
         </div>
       )}
     </div>
