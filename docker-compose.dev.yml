@@ -1,0 +1,26 @@
+version: '3.8'
+
+# Local development override — use with:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up db backend
+# Then in a separate terminal:
+#   cd frontend && npm install && npm run dev
+# Open: http://localhost:5173
+
+services:
+  db:
+    ports:
+      - "5432:5432"   # expose DB so bonus_ai.py and DB tools (TablePlus, etc.) can connect
+
+  backend:
+    ports:
+      - "3001:3001"   # expose backend so Vite proxy can reach it
+    command: npm run dev   # use nodemon for auto-reload on file changes
+    environment:
+      NODE_ENV: development
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+
+  # Skip frontend and caddy in dev — Vite dev server runs natively instead
+  frontend:
+    profiles: ["skip"]
+  caddy:
+    profiles: ["skip"]

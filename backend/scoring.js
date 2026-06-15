@@ -17,32 +17,38 @@ async function loadScoringConfig() {
     const cfg = {};
     rows.forEach(r => { cfg[r.key] = Number(r.value); });
     return {
-      pointsResult:     cfg.points_result_correct ?? 5,
+      pointsResult:     cfg.points_result_correct ?? 7,
       pointsGoalDiff:   cfg.points_goal_diff       ?? 3,
       pointsTotalGoals: cfg.points_total_goals     ?? 3,
     };
   } catch {
-    return { pointsResult: 5, pointsGoalDiff: 3, pointsTotalGoals: 3 };
+    return { pointsResult: 7, pointsGoalDiff: 3, pointsTotalGoals: 3 };
   }
 }
 
-// Calculate score-only points (before bonus) for one prediction
-function calculateScorePoints(prediction, result, totalPreds, sameResultPreds, cfg) {
+// Calculate score-only breakdown for one prediction.
+// Returns { rawPoints, multiplier, scorePoints, breakdown } where breakdown holds per-component pts.
+function calculateScoreBreakdown(prediction, result, totalPreds, sameResultPreds, cfg) {
   const predCat = getResultCategory(prediction.home_score, prediction.away_score);
   const realCat = getResultCategory(result.home_score, result.away_score);
 
-  if (predCat !== realCat) return 0;
+  const zeroed = { result_points: 0, goal_diff_points: 0, total_goals_points: 0 };
+  if (predCat !== realCat) return { rawPoints: 0, multiplier: null, scorePoints: 0, breakdown: zeroed };
 
-  let raw = cfg.pointsResult;
-  if (realCat !== 0 && (prediction.home_score - prediction.away_score) === (result.home_score - result.away_score)) {
-    raw += cfg.pointsGoalDiff;
-  }
-  if ((prediction.home_score + prediction.away_score) === (result.home_score + result.away_score)) {
-    raw += cfg.pointsTotalGoals;
-  }
+  const resultPoints   = cfg.pointsResult;
+  const goalDiffPoints = (prediction.home_score - prediction.away_score) === (result.home_score - result.away_score)
+    ? cfg.pointsGoalDiff : 0;
+  const totalGoalsPoints = (prediction.home_score + prediction.away_score) === (result.home_score + result.away_score)
+    ? cfg.pointsTotalGoals : 0;
 
+  const rawPoints = resultPoints + goalDiffPoints + totalGoalsPoints;
   const multiplier = totalPreds <= 0 ? 1 : 1 + (1 - sameResultPreds / totalPreds);
-  return Math.round(raw * multiplier);
+  const scorePoints = Math.round(rawPoints * multiplier);
+
+  return {
+    rawPoints, multiplier, scorePoints,
+    breakdown: { result_points: resultPoints, goal_diff_points: goalDiffPoints, total_goals_points: totalGoalsPoints },
+  };
 }
 
 // Recalculate and save points for all predictions on one match.
@@ -74,15 +80,23 @@ async function recalculateMatchPoints(matchId, result) {
   const bonusMap = {};
   bonusRows.forEach(r => { bonusMap[r.user_id] = Number(r.bonus_pts); });
 
+  const wrongResult = { rawPoints: 0, multiplier: null, scorePoints: 0, breakdown: { result_points: 0, goal_diff_points: 0, total_goals_points: 0 } };
+
   for (const pred of predictions) {
     const predCat = getResultCategory(pred.home_score, pred.away_score);
-    const scorePoints = predCat === realCat
-      ? calculateScorePoints(pred, result, predictions.length, counts[String(predCat)], cfg)
-      : 0;
+    const { rawPoints, multiplier, scorePoints, breakdown } = predCat === realCat
+      ? calculateScoreBreakdown(pred, result, predictions.length, counts[String(predCat)], cfg)
+      : wrongResult;
     const bonusPoints = bonusMap[pred.user_id] ?? 0;
     await pool.query(
-      'UPDATE predictions SET points_earned = $1 WHERE id = $2',
-      [scorePoints + bonusPoints, pred.id]
+      `UPDATE predictions
+       SET points_earned       = $1,
+           score_raw_points    = $2,
+           score_multiplier    = $3,
+           bonus_points_earned = $4,
+           score_breakdown     = $5
+       WHERE id = $6`,
+      [scorePoints + bonusPoints, rawPoints, multiplier, bonusPoints, JSON.stringify(breakdown), pred.id]
     );
   }
 
@@ -105,4 +119,4 @@ async function recalculateAllPoints() {
   return { matchesProcessed: matches.length, predictionsUpdated };
 }
 
-module.exports = { calculateScorePoints, recalculateMatchPoints, recalculateAllPoints };
+module.exports = { calculateScoreBreakdown, recalculateMatchPoints, recalculateAllPoints };

@@ -100,7 +100,7 @@ INSERT INTO scoring_config (key, value, description) VALUES
   ('multiplier_goal_diff',    2,  'Multiplier for correct winner + correct goal difference'),
   ('multiplier_winner',       1,  'Multiplier for correct winner or draw (any score)'),
   ('multiplier_wrong',        0,  'Multiplier for wrong prediction'),
-  ('points_result_correct',   5,  'Points for predicting the correct result category'),
+  ('points_result_correct',   7,  'Points for predicting the correct result category'),
   ('points_goal_diff',        3,  'Points for predicting the correct goal difference'),
   ('points_total_goals',      3,  'Points for predicting the correct total goals')
 ON CONFLICT (key) DO NOTHING;
@@ -108,8 +108,19 @@ ON CONFLICT (key) DO NOTHING;
 -- Bonus points column added to bonus_answers
 ALTER TABLE bonus_answers ADD COLUMN IF NOT EXISTS points_earned NUMERIC DEFAULT NULL;
 
+-- Detailed scoring breakdown stored per prediction for accurate frontend display
+ALTER TABLE predictions ADD COLUMN IF NOT EXISTS score_raw_points NUMERIC DEFAULT NULL;
+ALTER TABLE predictions ADD COLUMN IF NOT EXISTS score_multiplier  NUMERIC DEFAULT NULL;
+ALTER TABLE predictions ADD COLUMN IF NOT EXISTS bonus_points_earned NUMERIC DEFAULT NULL;
+
 -- Track exact finish time (set when status transitions to FINISHED)
 ALTER TABLE matches ADD COLUMN IF NOT EXISTS finished_at TIMESTAMPTZ;
 
 -- Track when the AI bonus job was run for a match (prevents re-triggering)
 ALTER TABLE matches ADD COLUMN IF NOT EXISTS bonus_ai_triggered_at TIMESTAMPTZ;
+
+-- Update points_result_correct to 7 for existing databases
+UPDATE scoring_config SET value = 7 WHERE key = 'points_result_correct' AND value = 5;
+
+-- Per-component scoring breakdown stored at score time so the frontend never guesses
+ALTER TABLE predictions ADD COLUMN IF NOT EXISTS score_breakdown JSONB DEFAULT NULL;
