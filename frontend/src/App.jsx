@@ -66,6 +66,7 @@ function Layout() {
 
   return (
     <>
+      <FloatingBalls />
       <header style={{
         background: 'var(--surface)',
         borderBottom: '1px solid var(--border)',
@@ -74,7 +75,7 @@ function Layout() {
       }}>
         {/* Top row: logo + logout */}
         <div style={{ maxWidth: 800, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 44 }}>
-          <span style={{ fontWeight: 700, fontSize: 18, color: 'var(--accent)' }}>⚽ WC2026</span>
+          <img src="/2026_FIFA_World_Cup.svg.webp" alt="FIFA World Cup 2026" style={{ height: 38, width: 'auto' }} />
           <button
             onClick={handleLogout}
             style={{ background: 'none', color: 'var(--text-muted)', fontSize: 13 }}
@@ -106,6 +107,39 @@ function Layout() {
         <Route path="*" element={<Navigate to="/matches" replace />} />
       </Routes>
     </>
+  );
+}
+
+function FloatingBalls() {
+  const balls = [
+    { side: 'left',  top: '12%', size: 52, delay: 0,   offset: 18, duration: 4.2 },
+    { side: 'left',  top: '33%', size: 66, delay: 1.4, offset: 10, duration: 3.6 },
+    { side: 'left',  top: '56%', size: 44, delay: 0.7, offset: 24, duration: 4.8 },
+    { side: 'left',  top: '76%', size: 58, delay: 2.1, offset: 14, duration: 3.9 },
+    { side: 'right', top: '18%', size: 60, delay: 0.4, offset: 14, duration: 4.5 },
+    { side: 'right', top: '40%', size: 48, delay: 1.9, offset: 20, duration: 3.7 },
+    { side: 'right', top: '62%', size: 70, delay: 0.2, offset: 8,  duration: 4.1 },
+    { side: 'right', top: '82%', size: 50, delay: 2.6, offset: 18, duration: 4.6 },
+  ];
+  return (
+    <div aria-hidden="true">
+      {balls.map((b, i) => (
+        <img
+          key={i}
+          src="/1036597_main.webp"
+          alt=""
+          className="floating-ball"
+          style={{
+            [b.side]: b.offset,
+            top: b.top,
+            width: b.size,
+            height: b.size,
+            animationDuration: `${b.duration}s`,
+            animationDelay: `${b.delay}s`,
+          }}
+        />
+      ))}
+    </div>
   );
 }
 
