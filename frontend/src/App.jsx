@@ -96,30 +96,37 @@ function Layout() {
         </div>
       </header>
 
-      <Routes>
-        <Route path="/" element={<Navigate to="/matches" replace />} />
-        <Route path="/matches" element={<MatchesPage />} />
-        <Route path="/groups" element={<GroupStandingsPage />} />
-        <Route path="/bracket" element={<PlayoffsPage />} />
-        <Route path="/leaderboard" element={<LeaderboardPage />} />
-        <Route path="/my-predictions" element={<MyPredictionsPage />} />
-        {user.is_admin && <Route path="/admin" element={<AdminPage />} />}
-        <Route path="*" element={<Navigate to="/matches" replace />} />
-      </Routes>
+      <div style={{ position: 'relative', zIndex: 1 }}>
+        <Routes>
+          <Route path="/" element={<Navigate to="/matches" replace />} />
+          <Route path="/matches" element={<MatchesPage />} />
+          <Route path="/groups" element={<GroupStandingsPage />} />
+          <Route path="/bracket" element={<PlayoffsPage />} />
+          <Route path="/leaderboard" element={<LeaderboardPage />} />
+          <Route path="/my-predictions" element={<MyPredictionsPage />} />
+          {user.is_admin && <Route path="/admin" element={<AdminPage />} />}
+          <Route path="*" element={<Navigate to="/matches" replace />} />
+        </Routes>
+      </div>
     </>
   );
 }
 
 function FloatingBalls() {
+  // left/right as % of viewport width so balls spread across the full page
   const balls = [
-    { side: 'left',  top: '12%', size: 52, delay: 0,   offset: 18, duration: 4.2 },
-    { side: 'left',  top: '33%', size: 66, delay: 1.4, offset: 10, duration: 3.6 },
-    { side: 'left',  top: '56%', size: 44, delay: 0.7, offset: 24, duration: 4.8 },
-    { side: 'left',  top: '76%', size: 58, delay: 2.1, offset: 14, duration: 3.9 },
-    { side: 'right', top: '18%', size: 60, delay: 0.4, offset: 14, duration: 4.5 },
-    { side: 'right', top: '40%', size: 48, delay: 1.9, offset: 20, duration: 3.7 },
-    { side: 'right', top: '62%', size: 70, delay: 0.2, offset: 8,  duration: 4.1 },
-    { side: 'right', top: '82%', size: 50, delay: 2.6, offset: 18, duration: 4.6 },
+    { left: '3%',  top: '8%',  size: 52, delay: 0,   duration: 4.2 },
+    { left: '18%', top: '22%', size: 44, delay: 1.1, duration: 3.8 },
+    { left: '7%',  top: '42%', size: 66, delay: 0.6, duration: 4.6 },
+    { left: '25%', top: '60%', size: 48, delay: 2.0, duration: 3.5 },
+    { left: '5%',  top: '76%', size: 58, delay: 1.5, duration: 4.1 },
+    { left: '14%', top: '88%', size: 40, delay: 2.8, duration: 3.9 },
+    { left: '72%', top: '10%', size: 60, delay: 0.3, duration: 4.4 },
+    { left: '85%', top: '28%', size: 46, delay: 1.7, duration: 3.7 },
+    { left: '65%', top: '48%', size: 70, delay: 0.9, duration: 4.8 },
+    { left: '80%', top: '65%', size: 50, delay: 2.4, duration: 4.0 },
+    { left: '90%', top: '80%', size: 62, delay: 0.2, duration: 3.6 },
+    { left: '70%', top: '90%', size: 42, delay: 1.9, duration: 4.3 },
   ];
   return (
     <div aria-hidden="true">
@@ -130,7 +137,7 @@ function FloatingBalls() {
           alt=""
           className="floating-ball"
           style={{
-            [b.side]: b.offset,
+            left: b.left,
             top: b.top,
             width: b.size,
             height: b.size,
