@@ -25,6 +25,11 @@ export default function LeaderboardPage() {
   const myIndex = myRow ? rows.indexOf(myRow) : -1;
   const myMedal = myIndex >= 0 ? (MEDAL[myIndex] || null) : null;
 
+  const firstRow = rows[0];
+  const lastMatchLabel = firstRow?.last_match_home
+    ? `${firstRow.last_match_home} vs ${firstRow.last_match_away}`
+    : null;
+
   return (
     <div className="page">
       <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>Rankings</h1>
@@ -62,9 +67,21 @@ export default function LeaderboardPage() {
               <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--accent)' }}>
                 {Math.round(myRow.total_points)}
               </div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>pts</div>
+              {myRow.last_match_points != null ? (
+                <div style={{ fontSize: 11, fontWeight: 600, color: myRow.last_match_points > 0 ? 'var(--green)' : 'var(--text-muted)' }}>
+                  {myRow.last_match_points > 0 ? `+${Math.round(myRow.last_match_points)}` : '0'} last
+                </div>
+              ) : (
+                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>pts</div>
+              )}
             </div>
           </div>
+        </div>
+      )}
+
+      {lastMatchLabel && (
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>
+          Dernier match : <span style={{ fontWeight: 600, color: 'var(--text)' }}>{lastMatchLabel}</span>
         </div>
       )}
 
@@ -72,6 +89,7 @@ export default function LeaderboardPage() {
         {rows.map((row, i) => {
           const isMe = row.id === user.id;
           const medal = MEDAL[i] || null;
+          const lastPts = row.last_match_points != null ? Math.round(row.last_match_points) : null;
 
           return (
             <div
@@ -105,13 +123,17 @@ export default function LeaderboardPage() {
 
               {/* Points */}
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                <div style={{
-                  fontSize: 22, fontWeight: 700,
-                  color: i === 0 ? 'var(--yellow)' : 'var(--accent)'
-                }}>
+                <div style={{ fontSize: 22, fontWeight: 700, color: i === 0 ? 'var(--yellow)' : 'var(--accent)' }}>
                   {Math.round(row.total_points)}
                 </div>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>pts</div>
+                {lastPts !== null && (
+                  <div style={{ fontSize: 11, fontWeight: 600, color: lastPts > 0 ? 'var(--green)' : 'var(--text-muted)' }}>
+                    {lastPts > 0 ? `+${lastPts}` : '0'} last
+                  </div>
+                )}
+                {lastPts === null && (
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>pts</div>
+                )}
               </div>
             </div>
           );

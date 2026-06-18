@@ -12,7 +12,14 @@ const router = express.Router();
 router.get('/', requireAuth, async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT
+      `WITH last_match AS (
+         SELECT id, home_team, away_team
+         FROM matches
+         WHERE status = 'FINISHED' AND home_score IS NOT NULL
+         ORDER BY kickoff_time DESC
+         LIMIT 1
+       )
+       SELECT
          u.id,
          u.name,
          COALESCE(SUM(p.points_earned), 0)
@@ -22,11 +29,16 @@ router.get('/', requireAuth, async (req, res) => {
                WHERE ba.user_id = u.id AND ba.points_earned IS NOT NULL
              ), 0) AS total_points,
          COUNT(CASE WHEN p.points_earned > 0 THEN 1 END) AS correct_predictions,
-         COUNT(p.id) AS total_predictions
+         COUNT(p.id) AS total_predictions,
+         lmp.points_earned AS last_match_points,
+         lm.home_team      AS last_match_home,
+         lm.away_team      AS last_match_away
        FROM users u
-       LEFT JOIN predictions p ON u.id = p.user_id
+       LEFT JOIN (SELECT * FROM last_match) lm ON TRUE
+       LEFT JOIN predictions p   ON p.user_id  = u.id
+       LEFT JOIN predictions lmp ON lmp.user_id = u.id AND lmp.match_id = lm.id
        WHERE u.is_admin = FALSE
-       GROUP BY u.id, u.name
+       GROUP BY u.id, u.name, lmp.points_earned, lm.home_team, lm.away_team
        ORDER BY total_points DESC, u.name ASC`
     );
 
