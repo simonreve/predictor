@@ -64,8 +64,8 @@ export const adminCreateBonusQuestion = (match_id, type, question) =>
   request('/admin/bonus', { method: 'POST', body: { match_id, type, question } });
 export const adminDeleteBonusQuestion = (id) =>
   request(`/admin/bonus/${id}`, { method: 'DELETE' });
-export const adminSetBonusAnswer = (id, correct_answer) =>
-  request(`/admin/bonus/${id}/answer`, { method: 'PUT', body: { correct_answer } });
+export const adminSetBonusAnswer = (id, correct_answers) =>
+  request(`/admin/bonus/${id}/answer`, { method: 'PUT', body: { correct_answers } });
 export const adminGetBonusSubmissions = (id) =>
   request(`/admin/bonus/${id}/submissions`);
 

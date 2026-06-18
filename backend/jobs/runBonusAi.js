@@ -56,7 +56,7 @@ async function runBonusAi() {
         if (!answer) continue;
 
         await pool.query(
-          'UPDATE bonus_questions SET correct_answer = $1 WHERE id = $2',
+          'UPDATE bonus_questions SET correct_answer = $1, correct_answers = ARRAY[$1]::text[] WHERE id = $2',
           [answer, q.id]
         );
         console.log(`[BonusAI]   ✓ "${q.question}" → ${answer}`);

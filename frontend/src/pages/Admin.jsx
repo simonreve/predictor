@@ -821,7 +821,9 @@ function MatchBonusPanel({ match, onRefresh }) {
 function QuestionRow({ q, match, isLocked, onDelete, onRefresh }) {
   const [showDecide, setShowDecide] = useState(false);
   const [submissions, setSubmissions] = useState(null);
-  const [customAnswer, setCustomAnswer] = useState(q.correct_answer || '');
+  const initialAnswers = q.correct_answers?.length ? q.correct_answers : (q.correct_answer ? [q.correct_answer] : []);
+  const [selectedAnswers, setSelectedAnswers] = useState(initialAnswers);
+  const [customInput, setCustomInput] = useState('');
   const [saving, setSaving] = useState(false);
 
   async function loadSubmissions() {
@@ -834,11 +836,24 @@ function QuestionRow({ q, match, isLocked, onDelete, onRefresh }) {
     setShowDecide(v => !v);
   }
 
-  async function handleSetAnswer(ans) {
+  function toggleAnswer(ans) {
+    setSelectedAnswers(prev =>
+      prev.includes(ans) ? prev.filter(a => a !== ans) : [...prev, ans]
+    );
+  }
+
+  function addCustomInput() {
+    const trimmed = customInput.trim();
+    if (!trimmed || selectedAnswers.includes(trimmed)) return;
+    setSelectedAnswers(prev => [...prev, trimmed]);
+    setCustomInput('');
+  }
+
+  async function handleSave() {
+    if (selectedAnswers.length === 0) return;
     setSaving(true);
     try {
-      await adminSetBonusAnswer(q.id, ans);
-      setCustomAnswer(ans);
+      await adminSetBonusAnswer(q.id, selectedAnswers);
       onRefresh();
       setShowDecide(false);
     } catch (err) { alert(err.message); }
@@ -846,14 +861,18 @@ function QuestionRow({ q, match, isLocked, onDelete, onRefresh }) {
   }
 
   const displayCorrect = () => {
-    if (!q.correct_answer) return null;
-    if (q.type === 'country') {
-      if (q.correct_answer === 'home') return match.home_team;
-      if (q.correct_answer === 'away') return match.away_team;
-      return 'Aucune équipe';
-    }
-    return q.correct_answer;
+    const answers = q.correct_answers?.length ? q.correct_answers : (q.correct_answer ? [q.correct_answer] : []);
+    return answers.map(a => {
+      if (q.type === 'country') {
+        if (a === 'home') return match.home_team;
+        if (a === 'away') return match.away_team;
+        return 'Aucune équipe';
+      }
+      return a;
+    }).join(', ');
   };
+
+  const hasAnswer = q.correct_answers?.length > 0 || !!q.correct_answer;
 
   return (
     <div style={{ padding: 12, borderRadius: 8, background: 'var(--surface2)', border: '1px solid var(--border)' }}>
@@ -866,83 +885,34 @@ function QuestionRow({ q, match, isLocked, onDelete, onRefresh }) {
           {q.type === 'country' ? 'COUNTRY' : 'PLAYER'}
         </span>
         <span style={{ flex: 1, fontWeight: 600, fontSize: 14 }}>{q.question}</span>
-        {q.correct_answer && (
+        {hasAnswer && (
           <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600 }}>
             ✓ {displayCorrect()}
           </span>
         )}
-        <button
-          onClick={toggleDecide}
-          className="btn btn-secondary"
-          style={{ padding: '4px 10px', fontSize: 12 }}
-        >
-          {q.correct_answer ? 'Change answer' : 'Set answer'}
+        <button onClick={toggleDecide} className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: 12 }}>
+          {hasAnswer ? 'Change answer' : 'Set answer'}
         </button>
-        <button
-          onClick={() => onDelete(q.id)}
-          className="btn btn-danger"
-          style={{ padding: '4px 10px', fontSize: 12 }}
-        >
+        <button onClick={() => onDelete(q.id)} className="btn btn-danger" style={{ padding: '4px 10px', fontSize: 12 }}>
           Delete
         </button>
       </div>
 
-      {/* Decide panel */}
       {showDecide && (
         <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
-            Player submissions — click to set as correct answer:
-          </div>
-          {submissions === null
-            ? <div className="spinner" style={{ margin: '8px auto', width: 20, height: 20, borderWidth: 2 }} />
-            : submissions.length === 0
-            ? <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>No submissions yet.</p>
-            : (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
-                {submissions.map(s => (
-                  <button
-                    key={s.answer}
-                    onClick={() => setCustomAnswer(s.answer)}
-                    style={{
-                      padding: '5px 12px', borderRadius: 20, fontSize: 13, cursor: 'pointer',
-                      border: '1px solid var(--border)',
-                      background: customAnswer === s.answer ? 'var(--accent)' : 'var(--surface)',
-                      color: customAnswer === s.answer ? '#000' : 'var(--text)',
-                    }}
-                  >
-                    {q.type === 'country'
-                      ? (s.answer === 'home' ? match.home_team : s.answer === 'away' ? match.away_team : 'Aucune équipe')
-                      : s.answer
-                    }
-                    <span style={{ marginLeft: 5, fontSize: 11, opacity: 0.7 }}>×{s.count}</span>
-                  </button>
-                ))}
-              </div>
-            )
-          }
 
-          {/* Manual input for player type */}
-          {q.type === 'player' && (
-            <input
-              type="text"
-              value={customAnswer}
-              onChange={e => setCustomAnswer(e.target.value)}
-              placeholder="Or type custom answer…"
-              style={{ width: '100%', marginBottom: 8 }}
-            />
-          )}
-
+          {/* Country: single-select buttons */}
           {q.type === 'country' && (
-            <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
               {['home', 'away', 'none'].map(side => (
                 <button
                   key={side}
-                  onClick={() => setCustomAnswer(side)}
+                  onClick={() => setSelectedAnswers([side])}
                   style={{
                     padding: '5px 14px', borderRadius: 6, fontSize: 13, cursor: 'pointer',
                     border: '1px solid var(--border)',
-                    background: customAnswer === side ? 'var(--accent)' : 'var(--surface2)',
-                    color: customAnswer === side ? '#000' : 'var(--text)',
+                    background: selectedAnswers.includes(side) ? 'var(--accent)' : 'var(--surface2)',
+                    color: selectedAnswers.includes(side) ? '#000' : 'var(--text)',
                   }}
                 >
                   {side === 'none' ? 'Aucune équipe' : side === 'home' ? match.home_team : match.away_team}
@@ -951,11 +921,84 @@ function QuestionRow({ q, match, isLocked, onDelete, onRefresh }) {
             </div>
           )}
 
+          {/* Player: multi-select */}
+          {q.type === 'player' && (
+            <>
+              {/* Selected answers as removable chips */}
+              {selectedAnswers.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 10 }}>
+                  {selectedAnswers.map(a => (
+                    <span key={a} style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 5,
+                      padding: '3px 10px', borderRadius: 20,
+                      background: 'var(--accent)', color: '#000', fontSize: 12, fontWeight: 600,
+                    }}>
+                      {a}
+                      <button
+                        onClick={() => setSelectedAnswers(prev => prev.filter(x => x !== a))}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: '#000', fontSize: 13, lineHeight: 1 }}
+                      >✕</button>
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {/* Submissions as toggleable pills */}
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>
+                Click submissions to accept them:
+              </div>
+              {submissions === null
+                ? <div className="spinner" style={{ margin: '8px auto', width: 20, height: 20, borderWidth: 2 }} />
+                : submissions.length === 0
+                ? <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>No submissions yet.</p>
+                : (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+                    {submissions.map(s => (
+                      <button
+                        key={s.answer}
+                        onClick={() => toggleAnswer(s.answer)}
+                        style={{
+                          padding: '5px 12px', borderRadius: 20, fontSize: 13, cursor: 'pointer',
+                          border: '1px solid var(--border)',
+                          background: selectedAnswers.includes(s.answer) ? 'var(--accent)' : 'var(--surface)',
+                          color: selectedAnswers.includes(s.answer) ? '#000' : 'var(--text)',
+                        }}
+                      >
+                        {s.answer}
+                        <span style={{ marginLeft: 5, fontSize: 11, opacity: 0.7 }}>×{s.count}</span>
+                      </button>
+                    ))}
+                  </div>
+                )
+              }
+
+              {/* Custom variant input */}
+              <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+                <input
+                  type="text"
+                  value={customInput}
+                  onChange={e => setCustomInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomInput(); } }}
+                  placeholder="Add spelling variant…"
+                  style={{ flex: 1 }}
+                />
+                <button
+                  className="btn btn-secondary"
+                  onClick={addCustomInput}
+                  disabled={!customInput.trim()}
+                  style={{ padding: '6px 12px', fontSize: 13 }}
+                >
+                  Add
+                </button>
+              </div>
+            </>
+          )}
+
           <div style={{ display: 'flex', gap: 8 }}>
             <button
               className="btn"
-              onClick={() => handleSetAnswer(customAnswer)}
-              disabled={!customAnswer.trim() || saving}
+              onClick={handleSave}
+              disabled={selectedAnswers.length === 0 || saving}
               style={{ padding: '6px 14px', fontSize: 13 }}
             >
               {saving ? 'Saving…' : 'Confirm answer'}

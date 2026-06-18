@@ -197,18 +197,21 @@ router.delete('/bonus/:id', async (req, res) => {
   }
 });
 
-// PUT /api/admin/bonus/:id/answer — set the correct answer, award bonus points, recalculate totals
-// Body: { correct_answer }
+// PUT /api/admin/bonus/:id/answer — set accepted answers, award bonus points, recalculate totals
+// Body: { correct_answers: string[] }  (single string also accepted for backward compat)
 router.put('/bonus/:id/answer', async (req, res) => {
-  const { correct_answer } = req.body;
-  if (correct_answer == null || String(correct_answer).trim() === '') {
-    return res.status(400).json({ error: 'correct_answer is required' });
+  let { correct_answers } = req.body;
+  if (typeof correct_answers === 'string') correct_answers = [correct_answers];
+  const answers = (correct_answers || []).map(a => String(a).trim()).filter(Boolean);
+  if (answers.length === 0) {
+    return res.status(400).json({ error: 'At least one correct answer is required' });
   }
-  const trimmed = String(correct_answer).trim();
+  const primary = answers[0]; // kept in correct_answer for display / AI compat
+
   try {
     const { rows } = await pool.query(
-      `UPDATE bonus_questions SET correct_answer = $1 WHERE id = $2 RETURNING *`,
-      [trimmed, req.params.id]
+      `UPDATE bonus_questions SET correct_answer = $1, correct_answers = $2 WHERE id = $3 RETURNING *`,
+      [primary, answers, req.params.id]
     );
     if (!rows[0]) return res.status(404).json({ error: 'Question not found' });
     const q = rows[0];
@@ -216,26 +219,33 @@ router.put('/bonus/:id/answer', async (req, res) => {
     // Points: 3 for country questions, 5 for player questions
     const points = q.type === 'country' ? 3 : 5;
 
-    // Award points to correct answers, 0 to wrong ones
+    // Award points to any user whose answer matches one of the accepted answers
     if (q.type === 'country') {
       await pool.query(
-        `UPDATE bonus_answers SET points_earned = $1 WHERE question_id = $2 AND answer = $3`,
-        [points, q.id, trimmed]
+        `UPDATE bonus_answers SET points_earned = $1 WHERE question_id = $2 AND answer = ANY($3)`,
+        [points, q.id, answers]
       );
       await pool.query(
-        `UPDATE bonus_answers SET points_earned = 0 WHERE question_id = $1 AND answer != $2`,
-        [q.id, trimmed]
+        `UPDATE bonus_answers SET points_earned = 0 WHERE question_id = $1 AND NOT (answer = ANY($2))`,
+        [q.id, answers]
       );
     } else {
+      // Case-insensitive match against any accepted spelling
       await pool.query(
         `UPDATE bonus_answers SET points_earned = $1
-         WHERE question_id = $2 AND LOWER(TRIM(answer)) = LOWER(TRIM($3))`,
-        [points, q.id, trimmed]
+         WHERE question_id = $2
+           AND EXISTS (
+             SELECT 1 FROM unnest($3::text[]) a WHERE LOWER(TRIM(a)) = LOWER(TRIM(bonus_answers.answer))
+           )`,
+        [points, q.id, answers]
       );
       await pool.query(
         `UPDATE bonus_answers SET points_earned = 0
-         WHERE question_id = $1 AND LOWER(TRIM(answer)) != LOWER(TRIM($2))`,
-        [q.id, trimmed]
+         WHERE question_id = $1
+           AND NOT EXISTS (
+             SELECT 1 FROM unnest($2::text[]) a WHERE LOWER(TRIM(a)) = LOWER(TRIM(bonus_answers.answer))
+           )`,
+        [q.id, answers]
       );
     }
 

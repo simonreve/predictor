@@ -124,3 +124,9 @@ UPDATE scoring_config SET value = 7 WHERE key = 'points_result_correct' AND valu
 
 -- Per-component scoring breakdown stored at score time so the frontend never guesses
 ALTER TABLE predictions ADD COLUMN IF NOT EXISTS score_breakdown JSONB DEFAULT NULL;
+
+-- Multiple accepted spellings for bonus questions (mainly for player names)
+ALTER TABLE bonus_questions ADD COLUMN IF NOT EXISTS correct_answers TEXT[] DEFAULT '{}';
+UPDATE bonus_questions
+  SET correct_answers = ARRAY[correct_answer]
+  WHERE correct_answer IS NOT NULL AND correct_answer != '' AND correct_answers = '{}';
