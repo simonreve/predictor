@@ -30,6 +30,8 @@ router.get('/', requireAuth, async (req, res) => {
              ), 0) AS total_points,
          COUNT(CASE WHEN p.points_earned > 0 THEN 1 END) AS correct_predictions,
          COUNT(p.id) AS total_predictions,
+         (SELECT COUNT(*) FROM bonus_answers ba2
+          WHERE ba2.user_id = u.id AND ba2.points_earned > 0) AS bonus_correct,
          lmp.points_earned AS last_match_points,
          lm.home_team      AS last_match_home,
          lm.away_team      AS last_match_away

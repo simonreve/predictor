@@ -172,8 +172,13 @@ function UsersTab() {
 }
 
 /* ─── Scoring config tab ────────────────────────────────────────────── */
+const STAGE_KEYS = ['stage_mult_group_stage', 'stage_mult_round_of_32', 'stage_mult_round_of_16', 'stage_mult_quarter_finals', 'stage_mult_semi_finals', 'stage_mult_final', 'stage_mult_third_place'];
+const BASE_KEYS  = ['points_result_correct', 'points_goal_diff', 'points_total_goals'];
+
 function ScoringTab() {
+  const [allRows, setAllRows] = useState([]);
   const [config, setConfig] = useState([]);
+  const [stageConfig, setStageConfig] = useState([]);
   const [values, setValues] = useState({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -183,10 +188,13 @@ function ScoringTab() {
 
   useEffect(() => {
     adminGetScoring().then(rows => {
-      const editableRows = rows.filter(r => r.key === 'points_result_correct' || r.key === 'points_goal_diff' || r.key === 'points_total_goals');
-      setConfig(editableRows);
+      setAllRows(rows);
+      const base  = rows.filter(r => BASE_KEYS.includes(r.key));
+      const stage = rows.filter(r => STAGE_KEYS.includes(r.key));
+      setConfig(base);
+      setStageConfig(stage);
       const v = {};
-      editableRows.forEach(r => { v[r.key] = r.value; });
+      rows.forEach(r => { v[r.key] = r.value; });
       setValues(v);
     }).finally(() => setLoading(false));
   }, []);
@@ -194,7 +202,10 @@ function ScoringTab() {
   async function handleSave() {
     setSaving(true); setSuccess('');
     try {
-      await adminUpdateScoring(values);
+      // Only send keys that exist in DB
+      const payload = {};
+      [...BASE_KEYS, ...STAGE_KEYS].forEach(k => { if (values[k] != null) payload[k] = values[k]; });
+      await adminUpdateScoring(payload);
       setSuccess('Saved!');
       setTimeout(() => setSuccess(''), 2000);
     } catch (err) { alert(err.message); }
@@ -283,6 +294,26 @@ function ScoringTab() {
           </button>
           {success && <span style={{ color: 'var(--green)', fontSize: 13 }}>{success}</span>}
         </div>
+
+        {/* Stage multipliers */}
+        {stageConfig.length > 0 && (
+          <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
+            <h4 style={{ marginBottom: 10, fontSize: 14 }}>Multiplicateurs par phase</h4>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 8 }}>
+              {stageConfig.map(row => (
+                <div key={row.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.02)' }}>
+                  <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{row.description?.replace('Score multiplier — ', '')}</div>
+                  <input
+                    type="number" min="0" step="0.25"
+                    value={values[row.key] ?? row.value}
+                    onChange={e => setValues(v => ({ ...v, [row.key]: parseFloat(e.target.value) }))}
+                    style={{ width: 64, textAlign: 'center', fontWeight: 700 }}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
           <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 10 }}>
@@ -635,11 +666,11 @@ function BonusTemplatesPanel() {
             <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 8, background: 'var(--surface2)', border: '1px solid var(--border)' }}>
               <span style={{
                 fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 99,
-                background: t.type === 'country' ? 'rgba(0,212,170,0.15)' : 'rgba(255,107,53,0.15)',
-                color: t.type === 'country' ? 'var(--accent)' : 'var(--accent2)',
-              }}>{t.type === 'country' ? 'ÉQUIPE' : 'JOUEUR'}</span>
+                background: t.type === 'country' ? 'rgba(0,212,170,0.15)' : t.type === 'yesno' ? 'rgba(139,143,168,0.2)' : 'rgba(255,107,53,0.15)',
+                color: t.type === 'country' ? 'var(--accent)' : t.type === 'yesno' ? 'var(--text-muted)' : 'var(--accent2)',
+              }}>{t.type === 'country' ? 'ÉQUIPE' : t.type === 'yesno' ? 'OUI/NON' : 'JOUEUR'}</span>
               <span style={{ flex: 1, fontSize: 14 }}>{t.question}</span>
-              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t.type === 'country' ? '+3 pts' : '+5 pts'}</span>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t.type === 'country' ? '+3 pts' : t.type === 'yesno' ? '+2 pts' : '+5 pts'}</span>
               <button className="btn btn-danger" onClick={() => handleDelete(t.id)} style={{ padding: '3px 8px', fontSize: 12 }}>✕</button>
             </div>
           ))}
@@ -652,6 +683,7 @@ function BonusTemplatesPanel() {
               <select value={type} onChange={e => setType(e.target.value)} style={{ padding: '7px 10px' }}>
                 <option value="country">Équipe (+3 pts)</option>
                 <option value="player">Joueur (+5 pts)</option>
+                <option value="yesno">Oui/Non (+2 pts)</option>
               </select>
               <input
                 type="text"
@@ -798,6 +830,7 @@ function MatchBonusPanel({ match, onRefresh }) {
             <select value={type} onChange={e => setType(e.target.value)} style={{ padding: '7px 10px' }}>
               <option value="country">Country (home/away pick)</option>
               <option value="player">Player (text answer)</option>
+              <option value="yesno">Yes/No (+2 pts)</option>
             </select>
             <input
               type="text"
@@ -868,6 +901,7 @@ function QuestionRow({ q, match, isLocked, onDelete, onRefresh }) {
         if (a === 'away') return match.away_team;
         return 'Aucune équipe';
       }
+      if (q.type === 'yesno') return a === 'yes' ? 'Oui' : 'Non';
       return a;
     }).join(', ');
   };
@@ -879,10 +913,10 @@ function QuestionRow({ q, match, isLocked, onDelete, onRefresh }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <span style={{
           fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 99,
-          background: q.type === 'country' ? 'rgba(0,212,170,0.15)' : 'rgba(255,107,53,0.15)',
-          color: q.type === 'country' ? 'var(--accent)' : 'var(--accent2)',
+          background: q.type === 'country' ? 'rgba(0,212,170,0.15)' : q.type === 'yesno' ? 'rgba(139,143,168,0.2)' : 'rgba(255,107,53,0.15)',
+          color: q.type === 'country' ? 'var(--accent)' : q.type === 'yesno' ? 'var(--text-muted)' : 'var(--accent2)',
         }}>
-          {q.type === 'country' ? 'COUNTRY' : 'PLAYER'}
+          {q.type === 'country' ? 'COUNTRY' : q.type === 'yesno' ? 'OUI/NON' : 'PLAYER'}
         </span>
         <span style={{ flex: 1, fontWeight: 600, fontSize: 14 }}>{q.question}</span>
         {hasAnswer && (
@@ -900,6 +934,26 @@ function QuestionRow({ q, match, isLocked, onDelete, onRefresh }) {
 
       {showDecide && (
         <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+
+          {/* Yes/No: single-select */}
+          {q.type === 'yesno' && (
+            <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+              {['yes', 'no'].map(opt => (
+                <button
+                  key={opt}
+                  onClick={() => setSelectedAnswers([opt])}
+                  style={{
+                    padding: '5px 20px', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                    border: '1px solid var(--border)',
+                    background: selectedAnswers.includes(opt) ? 'var(--accent)' : 'var(--surface2)',
+                    color: selectedAnswers.includes(opt) ? '#000' : 'var(--text)',
+                  }}
+                >
+                  {opt === 'yes' ? 'Oui' : 'Non'}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Country: single-select buttons */}
           {q.type === 'country' && (

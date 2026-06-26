@@ -100,4 +100,62 @@ router.get('/me', requireAuth, async (req, res) => {
   }
 });
 
+// GET /api/predictions/users — non-admin user list for compare dropdown
+router.get('/users', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT id, name FROM users WHERE is_admin = FALSE ORDER BY name ASC'
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('List users error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// GET /api/predictions/compare/:userId — all predictions for another user (for compare page)
+router.get('/compare/:userId', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT p.match_id, p.home_score, p.away_score, p.points_earned,
+              m.home_team, m.away_team, m.home_team_code, m.away_team_code,
+              m.kickoff_time, m.stage, m.status AS match_status,
+              m.home_score AS match_home_score, m.away_score AS match_away_score
+       FROM predictions p
+       JOIN matches m ON m.id = p.match_id
+       WHERE p.user_id = $1
+       ORDER BY m.kickoff_time ASC`,
+      [req.params.userId]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('Compare predictions error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// GET /api/predictions/match/:matchId — all users' predictions for a finished match
+router.get('/match/:matchId', requireAuth, async (req, res) => {
+  try {
+    const { rows: matchRows } = await pool.query(
+      'SELECT status FROM matches WHERE id = $1', [req.params.matchId]
+    );
+    if (!matchRows[0] || matchRows[0].status !== 'FINISHED') {
+      return res.status(403).json({ error: 'Match not finished yet' });
+    }
+    const { rows } = await pool.query(
+      `SELECT p.home_score, p.away_score, p.points_earned, u.name AS user_name
+       FROM predictions p
+       JOIN users u ON u.id = p.user_id
+       WHERE p.match_id = $1
+       ORDER BY p.points_earned DESC NULLS LAST, u.name ASC`,
+      [req.params.matchId]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('Match predictions error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 module.exports = router;

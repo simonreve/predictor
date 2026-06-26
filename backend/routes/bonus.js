@@ -38,6 +38,9 @@ router.post('/answer', requireAuth, async (req, res) => {
     if (q.type === 'country' && !['home', 'away', 'none'].includes(trimmed)) {
       return res.status(400).json({ error: 'Country answer must be "home", "away", or "none"' });
     }
+    if (q.type === 'yesno' && !['yes', 'no'].includes(trimmed.toLowerCase())) {
+      return res.status(400).json({ error: 'Answer must be "yes" or "no"' });
+    }
 
     await pool.query(
       `INSERT INTO bonus_answers (user_id, question_id, answer, submitted_at)

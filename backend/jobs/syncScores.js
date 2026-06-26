@@ -145,7 +145,7 @@ async function runSync() {
             'UPDATE matches SET finished_at = NOW() WHERE id = $1',
             [existing_match.id]
           );
-          await recalculateMatchPoints(existing_match.id, { home_score: homeScore, away_score: awayScore });
+          await recalculateMatchPoints(existing_match.id, { home_score: homeScore, away_score: awayScore, stage: stageDisplay });
           matchesUpdated++;
         }
       }

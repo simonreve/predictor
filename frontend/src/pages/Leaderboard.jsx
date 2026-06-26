@@ -61,6 +61,7 @@ export default function LeaderboardPage() {
               <div style={{ fontWeight: 600, fontSize: 16 }}>{myRow.name}</div>
               <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
                 {myRow.correct_predictions} correct / {myRow.total_predictions} predictions
+                {myRow.bonus_correct > 0 && <span style={{ marginLeft: 8, color: 'var(--accent2)' }}>· {myRow.bonus_correct} bonus</span>}
               </div>
             </div>
             <div style={{ textAlign: 'right', flexShrink: 0 }}>
@@ -118,6 +119,7 @@ export default function LeaderboardPage() {
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
                   {row.correct_predictions} correct / {row.total_predictions} predictions
+                  {row.bonus_correct > 0 && <span style={{ marginLeft: 8, color: 'var(--accent2)' }}>· {row.bonus_correct} bonus</span>}
                 </div>
               </div>
 

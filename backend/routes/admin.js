@@ -170,8 +170,8 @@ router.post('/bonus', async (req, res) => {
   if (!match_id || !type || !question?.trim()) {
     return res.status(400).json({ error: 'match_id, type, and question are required' });
   }
-  if (!['country', 'player'].includes(type)) {
-    return res.status(400).json({ error: 'type must be country or player' });
+  if (!['country', 'player', 'yesno'].includes(type)) {
+    return res.status(400).json({ error: 'type must be country, player, or yesno' });
   }
   try {
     const { rows } = await pool.query(
@@ -216,11 +216,11 @@ router.put('/bonus/:id/answer', async (req, res) => {
     if (!rows[0]) return res.status(404).json({ error: 'Question not found' });
     const q = rows[0];
 
-    // Points: 3 for country questions, 5 for player questions
-    const points = q.type === 'country' ? 3 : 5;
+    // Points: 3 for country, 2 for yesno, 5 for player
+    const points = q.type === 'player' ? 5 : q.type === 'yesno' ? 2 : 3;
 
     // Award points to any user whose answer matches one of the accepted answers
-    if (q.type === 'country') {
+    if (q.type === 'country' || q.type === 'yesno') {
       await pool.query(
         `UPDATE bonus_answers SET points_earned = $1 WHERE question_id = $2 AND answer = ANY($3)`,
         [points, q.id, answers]
@@ -251,11 +251,11 @@ router.put('/bonus/:id/answer', async (req, res) => {
 
     // Recalculate predictions.points_earned for this match (score × multiplier + bonus)
     const { rows: matchRows } = await pool.query(
-      'SELECT home_score, away_score FROM matches WHERE id = $1', [q.match_id]
+      'SELECT home_score, away_score, stage FROM matches WHERE id = $1', [q.match_id]
     );
     const match = matchRows[0];
     if (match?.home_score != null && match?.away_score != null) {
-      await recalculateMatchPoints(q.match_id, { home_score: match.home_score, away_score: match.away_score });
+      await recalculateMatchPoints(q.match_id, { home_score: match.home_score, away_score: match.away_score, stage: match.stage });
     }
 
     res.json(q);
@@ -317,8 +317,8 @@ router.post('/question-templates', async (req, res) => {
   if (!type || !question?.trim()) {
     return res.status(400).json({ error: 'type and question are required' });
   }
-  if (!['country', 'player'].includes(type)) {
-    return res.status(400).json({ error: 'type must be country or player' });
+  if (!['country', 'player', 'yesno'].includes(type)) {
+    return res.status(400).json({ error: 'type must be country, player, or yesno' });
   }
   try {
     const { rows } = await pool.query(

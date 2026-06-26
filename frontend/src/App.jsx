@@ -11,6 +11,7 @@ import MyPredictionsPage from './pages/MyPredictions';
 import AdminPage from './pages/Admin';
 import GroupStandingsPage from './pages/GroupStandings';
 import PlayoffsPage from './pages/Playoffs';
+import ComparePage from './pages/Compare';
 
 // Auth context — share the logged-in user across all components
 export const AuthContext = createContext(null);
@@ -91,6 +92,7 @@ function Layout() {
             <NavItem to="/bracket">Bracket</NavItem>
             <NavItem to="/leaderboard">Rankings</NavItem>
             <NavItem to="/my-predictions">Mine</NavItem>
+            <NavItem to="/compare">Compare</NavItem>
             {user.is_admin && <NavItem to="/admin">Admin</NavItem>}
           </nav>
         </div>
@@ -104,6 +106,7 @@ function Layout() {
           <Route path="/bracket" element={<PlayoffsPage />} />
           <Route path="/leaderboard" element={<LeaderboardPage />} />
           <Route path="/my-predictions" element={<MyPredictionsPage />} />
+          <Route path="/compare" element={<ComparePage />} />
           {user.is_admin && <Route path="/admin" element={<AdminPage />} />}
           <Route path="*" element={<Navigate to="/matches" replace />} />
         </Routes>

@@ -50,18 +50,21 @@ function BonusRow({ q, match, isLocked, value, onChange }) {
       if (ans === 'away') return match.away_team;
       if (ans === 'none') return 'Aucune équipe';
     }
+    if (q.type === 'yesno') return ans === 'yes' ? 'Oui' : ans === 'no' ? 'Non' : '—';
     return ans;
   };
 
   const correct = q.correct_answer;
   const isCorrect = correct && value && (
-    q.type === 'country' ? value === correct : value.trim().toLowerCase() === correct.trim().toLowerCase()
+    q.type === 'country' ? value === correct :
+    q.type === 'yesno'   ? value === correct :
+    value.trim().toLowerCase() === correct.trim().toLowerCase()
   );
 
   return (
     <div style={{ marginBottom: 10 }}>
       <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 5, fontWeight: 600 }}>
-        {q.type === 'country' ? '🌍' : '⚽'} {q.question}
+        {q.type === 'country' ? '🌍' : q.type === 'yesno' ? '✅' : '⚽'} {q.question}
       </div>
 
       {!isLocked ? (
@@ -85,6 +88,24 @@ function BonusRow({ q, match, isLocked, value, onChange }) {
                     {' '}{side === 'home' ? match.home_team : match.away_team}
                   </>
                 )}
+              </button>
+            ))}
+          </div>
+        ) : q.type === 'yesno' ? (
+          <div style={{ display: 'flex', gap: 6 }}>
+            {['yes', 'no'].map(opt => (
+              <button
+                key={opt}
+                onClick={() => onChange(opt)}
+                style={{
+                  padding: '5px 20px', borderRadius: 6, fontSize: 13, fontWeight: 600,
+                  border: '1px solid var(--border)',
+                  background: value === opt ? 'var(--accent)' : 'var(--surface2)',
+                  color: value === opt ? '#000' : 'var(--text)',
+                  cursor: 'pointer', transition: 'all 0.15s',
+                }}
+              >
+                {opt === 'yes' ? 'Oui' : 'Non'}
               </button>
             ))}
           </div>
@@ -137,6 +158,12 @@ function PointsBreakdown({ pred }) {
             <BreakdownRow label="Résultat correct"    pts={sb.result_points}     ok={resultCorrect} />
             {resultCorrect && <BreakdownRow label="Différence de buts" pts={sb.goal_diff_points}  ok={goalDiffCorrect} />}
             {resultCorrect && <BreakdownRow label="Total de buts"      pts={sb.total_goals_points} ok={totalGoalsCorrect} />}
+            {resultCorrect && sb.stage_multiplier != null && sb.stage_multiplier !== 1 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Multiplicateur phase</span>
+                <span style={{ color: 'var(--accent2)', fontWeight: 600 }}>×{sb.stage_multiplier}</span>
+              </div>
+            )}
             {resultCorrect && multiplier != null && (
               <div style={{ paddingTop: 4, marginTop: 2, borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: 'var(--text-muted)' }}>Multiplicateur rareté</span>

@@ -46,6 +46,9 @@ export const submitPrediction = (match_id, home_score, away_score, bonus_predict
   });
 
 export const getMyPredictions = () => request('/predictions/me');
+export const getUsers = () => request('/predictions/users');
+export const getUserPredictions = (userId) => request(`/predictions/compare/${userId}`);
+export const getMatchPredictions = (matchId) => request(`/predictions/match/${matchId}`);
 
 // Leaderboard
 export const getLeaderboard = () => request('/leaderboard');

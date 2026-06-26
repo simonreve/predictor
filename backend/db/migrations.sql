@@ -130,3 +130,22 @@ ALTER TABLE bonus_questions ADD COLUMN IF NOT EXISTS correct_answers TEXT[] DEFA
 UPDATE bonus_questions
   SET correct_answers = ARRAY[correct_answer]
   WHERE correct_answer IS NOT NULL AND correct_answer != '' AND correct_answers = '{}';
+
+-- Stage-based score multipliers (stored in scoring_config so admin can edit them)
+INSERT INTO scoring_config (key, value, description) VALUES
+  ('stage_mult_group_stage',    1,    'Score multiplier — Group Stage'),
+  ('stage_mult_round_of_32',    1.25, 'Score multiplier — Round of 32 (16ème de finale)'),
+  ('stage_mult_round_of_16',    1.5,  'Score multiplier — Round of 16 (1/8 de finale)'),
+  ('stage_mult_quarter_finals', 2,    'Score multiplier — Quarter-Finals'),
+  ('stage_mult_semi_finals',    3,    'Score multiplier — Semi-Finals'),
+  ('stage_mult_final',          4,    'Score multiplier — Final'),
+  ('stage_mult_third_place',    2,    'Score multiplier — Third Place')
+ON CONFLICT (key) DO NOTHING;
+
+-- Allow yes/no bonus question type
+ALTER TABLE bonus_questions DROP CONSTRAINT IF EXISTS bonus_questions_type_check;
+ALTER TABLE bonus_questions ADD CONSTRAINT bonus_questions_type_check
+  CHECK (type IN ('country', 'player', 'yesno'));
+ALTER TABLE question_templates DROP CONSTRAINT IF EXISTS question_templates_type_check;
+ALTER TABLE question_templates ADD CONSTRAINT question_templates_type_check
+  CHECK (type IN ('country', 'player', 'yesno'));
