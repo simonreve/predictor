@@ -99,10 +99,11 @@ export default function ComparePage() {
           </div>
 
           {/* Column headers */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 8, padding: '6px 12px', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: 8, padding: '6px 12px', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
             <span>Match</span>
             <span style={{ textAlign: 'center', minWidth: 90 }}>Vous</span>
             <span style={{ textAlign: 'center', minWidth: 90 }}>{selectedUser?.name}</span>
+            <span style={{ textAlign: 'center', minWidth: 44 }}>Δ</span>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -123,7 +124,7 @@ export default function ComparePage() {
                   </div>
 
                   {/* Predictions grid */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 8, alignItems: 'center' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: 8, alignItems: 'center' }}>
                     <div />
 
                     {/* My prediction */}
@@ -153,6 +154,21 @@ export default function ComparePage() {
                         <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>—</span>
                       )}
                     </div>
+
+                    {/* Delta */}
+                    {(() => {
+                      const myPts = parseFloat(myP.points_earned) || 0;
+                      const theirPts = theirP ? (parseFloat(theirP.points_earned) || 0) : null;
+                      if (theirPts === null) return <div style={{ minWidth: 44 }} />;
+                      const delta = Math.round(myPts - theirPts);
+                      const color = delta > 0 ? '#22c55e' : delta < 0 ? '#ef4444' : 'var(--text-muted)';
+                      const label = delta > 0 ? `+${delta}` : `${delta}`;
+                      return (
+                        <div style={{ textAlign: 'center', minWidth: 44, fontWeight: 700, fontSize: 13, color }}>
+                          {label}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               );

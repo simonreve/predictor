@@ -28,7 +28,7 @@ router.get('/', requireAuth, async (req, res) => {
                FROM bonus_answers ba
                WHERE ba.user_id = u.id AND ba.points_earned IS NOT NULL
              ), 0) AS total_points,
-         COUNT(CASE WHEN p.points_earned > 0 THEN 1 END) AS correct_predictions,
+         COUNT(CASE WHEN COALESCE((p.score_breakdown->>'result_points')::int, 0) > 0 THEN 1 END) AS correct_predictions,
          COUNT(p.id) AS total_predictions,
          (SELECT COUNT(*) FROM bonus_answers ba2
           WHERE ba2.user_id = u.id AND ba2.points_earned > 0) AS bonus_correct,
