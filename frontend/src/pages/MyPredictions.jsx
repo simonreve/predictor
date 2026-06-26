@@ -89,7 +89,7 @@ export default function MyPredictionsPage() {
 
   useEffect(() => {
     getMyPredictions()
-      .then(setPredictions)
+      .then(data => setPredictions([...data].reverse()))
       .catch(err => setError(err.message))
       .finally(() => setLoading(false));
   }, []);
