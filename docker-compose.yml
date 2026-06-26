@@ -53,7 +53,7 @@ services:
       - "8080:80"
       - "8443:443"
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./Caddyfile.staging:/etc/caddy/Caddyfile:ro
       - caddy_data_staging:/data
       - caddy_config_staging:/config
     depends_on:
