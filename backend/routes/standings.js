@@ -162,7 +162,7 @@ router.get('/bracket', requireAuth, async (req, res) => {
     const { rows } = await pool.query(`
       SELECT * FROM matches
       WHERE stage != 'Group Stage'
-      ORDER BY kickoff_time ASC
+      ORDER BY COALESCE(bracket_slot, 999) ASC, kickoff_time ASC
     `);
 
     const stages = {};
