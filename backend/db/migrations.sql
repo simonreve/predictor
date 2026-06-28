@@ -149,3 +149,28 @@ ALTER TABLE bonus_questions ADD CONSTRAINT bonus_questions_type_check
 ALTER TABLE question_templates DROP CONSTRAINT IF EXISTS question_templates_type_check;
 ALTER TABLE question_templates ADD CONSTRAINT question_templates_type_check
   CHECK (type IN ('country', 'player', 'yesno'));
+
+-- Bracket visual ordering for knockout matches
+-- R32: slots 0-15 (hardcoded by team names); R16/QF/SF: propagated via floor(prev_slot/2) in syncScores.js
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS bracket_slot INTEGER;
+
+-- Populate R32 bracket slots from known team matchups (idempotent)
+UPDATE matches SET bracket_slot = CASE
+  WHEN home_team IN ('Germany','Paraguay')                             OR away_team IN ('Germany','Paraguay')                             THEN 0
+  WHEN home_team IN ('France','Sweden')                               OR away_team IN ('France','Sweden')                               THEN 1
+  WHEN home_team IN ('South Africa','Canada')                         OR away_team IN ('South Africa','Canada')                         THEN 2
+  WHEN home_team IN ('Netherlands','Morocco')                         OR away_team IN ('Netherlands','Morocco')                         THEN 3
+  WHEN home_team IN ('Portugal','Croatia')                            OR away_team IN ('Portugal','Croatia')                            THEN 4
+  WHEN home_team IN ('Spain','Austria')                               OR away_team IN ('Spain','Austria')                               THEN 5
+  WHEN home_team IN ('United States','Bosnia-Herzegovina','Bosnia and Herzegovina') OR away_team IN ('United States','Bosnia-Herzegovina','Bosnia and Herzegovina') THEN 6
+  WHEN home_team IN ('Belgium','Senegal')                             OR away_team IN ('Belgium','Senegal')                             THEN 7
+  WHEN home_team IN ('Brazil','Japan')                                OR away_team IN ('Brazil','Japan')                                THEN 8
+  WHEN home_team IN ('Ivory Coast','Côte d''Ivoire','Norway')         OR away_team IN ('Ivory Coast','Côte d''Ivoire','Norway')         THEN 9
+  WHEN home_team IN ('Mexico','Ecuador')                              OR away_team IN ('Mexico','Ecuador')                              THEN 10
+  WHEN home_team IN ('England','Congo DR','DR Congo')                 OR away_team IN ('England','Congo DR','DR Congo')                 THEN 11
+  WHEN home_team IN ('Argentina','Cape Verde')                        OR away_team IN ('Argentina','Cape Verde')                        THEN 12
+  WHEN home_team IN ('Australia','Egypt')                             OR away_team IN ('Australia','Egypt')                             THEN 13
+  WHEN home_team IN ('Switzerland','Algeria')                         OR away_team IN ('Switzerland','Algeria')                         THEN 14
+  WHEN home_team IN ('Colombia','Ghana')                              OR away_team IN ('Colombia','Ghana')                              THEN 15
+END
+WHERE stage = 'Round of 32' AND bracket_slot IS NULL;

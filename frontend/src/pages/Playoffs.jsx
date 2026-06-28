@@ -9,9 +9,8 @@ const CARD_H = ROW_H * 2 + 1; // 65px  (2 rows + 1px divider)
 const GAP    = 8;            // vertical gap between cards in the same round
 const UNIT   = CARD_H + GAP; // 73 — but we want integers; see below
 
-// Use a round UNIT so all offsets are integers
-// UNIT = 72 works with CARD_H=64 (we accept 1px rounding on the card)
-const U      = 72;
+// U = card height + gap; gap needs room for the date label (~12px) + padding
+const U      = 88;
 const BETWEEN = 52;          // horizontal space between adjacent round columns
 const STEP   = CARD_W + BETWEEN; // column stride: 232
 const CONN_W = 18;           // horizontal arm of the ⊣ connector
@@ -33,6 +32,15 @@ function topOff(idx)      { return (Math.pow(2, idx) - 1) * U / 2; }
 
 const CANVAS_H = 15 * U + CARD_H; // tall enough for 16 R32 cards
 const CANVAS_W = ROUNDS.length * STEP - BETWEEN;
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+const MONTHS = ['jan','fév','mar','avr','mai','juin','juil','août','sep','oct','nov','déc'];
+function formatKickoff(isoStr) {
+  if (!isoStr) return null;
+  const d = new Date(isoStr);
+  const min = d.getMinutes();
+  return `${d.getDate()} ${MONTHS[d.getMonth()]} · ${d.getHours()}h${min ? String(min).padStart(2,'0') : ''}`;
+}
 
 // ── Small components ──────────────────────────────────────────────────────────
 function Flag({ code, name }) {
@@ -126,8 +134,19 @@ function BracketCanvas({ stages }) {
       const left  = rIdx * STEP;
 
       // Card
+      const kickoffLabel = match ? formatKickoff(match.kickoff_time) : null;
       nodes.push(
         <div key={`c-${rIdx}-${i}`} style={{ position: 'absolute', top, left }}>
+          {kickoffLabel && (
+            <div style={{
+              position: 'absolute', bottom: '100%', left: 0,
+              width: CARD_W, textAlign: 'center',
+              fontSize: 9, color: 'var(--text-muted)',
+              paddingBottom: 3, whiteSpace: 'nowrap',
+            }}>
+              {kickoffLabel}
+            </div>
+          )}
           {match ? <MatchCard match={match} /> : <Ghost />}
         </div>
       );
