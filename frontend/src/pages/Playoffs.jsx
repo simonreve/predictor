@@ -9,9 +9,8 @@ const CARD_H = ROW_H * 2 + 1; // 65px  (2 rows + 1px divider)
 const GAP    = 8;            // vertical gap between cards in the same round
 const UNIT   = CARD_H + GAP; // 73 — but we want integers; see below
 
-// Use a round UNIT so all offsets are integers
-// UNIT = 72 works with CARD_H=64 (we accept 1px rounding on the card)
-const U      = 72;
+// U = card height + gap; gap needs room for the date label (~12px) + padding
+const U      = 88;
 const BETWEEN = 52;          // horizontal space between adjacent round columns
 const STEP   = CARD_W + BETWEEN; // column stride: 232
 const CONN_W = 18;           // horizontal arm of the ⊣ connector
