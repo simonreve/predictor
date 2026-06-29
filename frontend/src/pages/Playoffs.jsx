@@ -34,12 +34,13 @@ const CANVAS_H = 15 * U + CARD_H; // tall enough for 16 R32 cards
 const CANVAS_W = ROUNDS.length * STEP - BETWEEN;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+const WEEKDAYS = ['dim','lun','mar','mer','jeu','ven','sam'];
 const MONTHS = ['jan','fév','mar','avr','mai','juin','juil','août','sep','oct','nov','déc'];
 function formatKickoff(isoStr) {
   if (!isoStr) return null;
   const d = new Date(isoStr);
   const min = d.getMinutes();
-  return `${d.getDate()} ${MONTHS[d.getMonth()]} · ${d.getHours()}h${min ? String(min).padStart(2,'0') : ''}`;
+  return `${WEEKDAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]} · ${d.getHours()}h${min ? String(min).padStart(2,'0') : ''}`;
 }
 
 // ── Small components ──────────────────────────────────────────────────────────
