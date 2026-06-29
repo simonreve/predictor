@@ -34,13 +34,24 @@ const CANVAS_H = 15 * U + CARD_H; // tall enough for 16 R32 cards
 const CANVAS_W = ROUNDS.length * STEP - BETWEEN;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-const WEEKDAYS = ['dim','lun','mar','mer','jeu','ven','sam'];
-const MONTHS = ['jan','fév','mar','avr','mai','juin','juil','août','sep','oct','nov','déc'];
+const TOURNAMENT_TZ = 'Europe/Paris';
+const KICKOFF_FORMATTER = new Intl.DateTimeFormat('fr-FR', {
+  timeZone: TOURNAMENT_TZ,
+  weekday: 'short',
+  day: 'numeric',
+  month: 'short',
+  hour: 'numeric',
+  minute: '2-digit',
+  hour12: false,
+});
+
 function formatKickoff(isoStr) {
   if (!isoStr) return null;
-  const d = new Date(isoStr);
-  const min = d.getMinutes();
-  return `${WEEKDAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]} · ${d.getHours()}h${min ? String(min).padStart(2,'0') : ''}`;
+  const parts = Object.fromEntries(
+    KICKOFF_FORMATTER.formatToParts(new Date(isoStr)).map(part => [part.type, part.value])
+  );
+  const hour = parts.minute === '00' ? `${parts.hour}h` : `${parts.hour}h${parts.minute}`;
+  return `${parts.weekday} ${parts.day} ${parts.month.replace('.', '')} · ${hour}`;
 }
 
 function flagCode(name, code) {
