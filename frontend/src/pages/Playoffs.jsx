@@ -43,12 +43,28 @@ function formatKickoff(isoStr) {
   return `${WEEKDAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]} · ${d.getHours()}h${min ? String(min).padStart(2,'0') : ''}`;
 }
 
+function flagCode(name, code) {
+  const aliases = {
+    'cabo verde': 'cv',
+    'cabo verde islands': 'cv',
+    'cape verde': 'cv',
+    'cape verde islands': 'cv',
+    'cpv': 'cv',
+    'sweden': 'se',
+    'swe': 'se',
+  };
+  const normalizedName = String(name || '').trim().toLowerCase();
+  const normalizedCode = String(code || '').trim().toLowerCase();
+  return aliases[normalizedName] || aliases[normalizedCode] || normalizedCode;
+}
+
 // ── Small components ──────────────────────────────────────────────────────────
 function Flag({ code, name }) {
-  if (!code) return <span style={{ width: 20, display: 'inline-block', flexShrink: 0 }} />;
+  const resolvedCode = flagCode(name, code);
+  if (!resolvedCode) return <span style={{ width: 20, display: 'inline-block', flexShrink: 0 }} />;
   return (
     <img
-      src={`https://flagcdn.com/w40/${code}.png`}
+      src={`https://flagcdn.com/w40/${resolvedCode}.png`}
       alt={name || ''}
       style={{ width: 20, height: 'auto', borderRadius: 2, flexShrink: 0 }}
       onError={e => { e.target.style.display = 'none'; }}
