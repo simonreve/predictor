@@ -36,19 +36,27 @@ const CANVAS_W = ROUNDS.length * STEP - BETWEEN;
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const WEEKDAYS = ['dim','lun','mar','mer','jeu','ven','sam'];
 const MONTHS = ['jan','fév','mar','avr','mai','juin','juil','août','sep','oct','nov','déc'];
+const PARIS_TIME_FORMATTER = new Intl.DateTimeFormat('fr-FR', {
+  timeZone: 'Europe/Paris',
+  hour: 'numeric',
+  minute: '2-digit',
+  hour12: false,
+});
 
 function formatKickoff(isoStr) {
   if (!isoStr) return null;
   const raw = String(isoStr);
   const dateMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  const timeMatch = raw.match(/T(\d{2}):(\d{2})/);
 
   if (!dateMatch) return null;
 
   const [, year, month, day] = dateMatch;
   const calendarDate = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day), 12));
-  const hour = timeMatch
-    ? `${Number(timeMatch[1])}h${timeMatch[2] === '00' ? '' : timeMatch[2]}`
+  const timeParts = Object.fromEntries(
+    PARIS_TIME_FORMATTER.formatToParts(new Date(raw)).map(part => [part.type, part.value])
+  );
+  const hour = timeParts.hour
+    ? `${timeParts.hour}h${timeParts.minute === '00' ? '' : timeParts.minute}`
     : '';
 
   return `${WEEKDAYS[calendarDate.getUTCDay()]} ${Number(day)} ${MONTHS[Number(month) - 1]}${hour ? ` · ${hour}` : ''}`;
