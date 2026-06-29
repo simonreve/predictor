@@ -62,16 +62,18 @@ async function computeBracketSlot(homeTeam, awayTeam, stage) {
   const prevStage = PREV_STAGE[stage];
   if (!prevStage) return null;
 
-  // Skip if either team is still TBD
-  if (!homeTeam || homeTeam === 'TBD' || !awayTeam || awayTeam === 'TBD') return null;
+  const knownTeams = [homeTeam, awayTeam].filter(team => team && team !== 'TBD');
+  if (knownTeams.length === 0) return null;
 
-  // Find which slot the home team came from in the previous round
+  // Find which previous-round slot either known team came from.
+  // This keeps future matches in the correct visual branch even when only one side is known.
   const { rows } = await pool.query(
     `SELECT bracket_slot FROM matches
-     WHERE stage = $1 AND (home_team = $2 OR away_team = $2)
+     WHERE stage = $1 AND (home_team = ANY($2) OR away_team = ANY($2))
      AND bracket_slot IS NOT NULL
+     ORDER BY bracket_slot ASC
      LIMIT 1`,
-    [prevStage, homeTeam]
+    [prevStage, knownTeams]
   );
   if (rows.length === 0) return null;
   return Math.floor(rows[0].bracket_slot / 2);

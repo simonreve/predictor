@@ -121,15 +121,32 @@ function Ghost() {
   );
 }
 
+function matchesBySlot(matches, slotCount) {
+  const placed = Array(slotCount).fill(null);
+
+  for (const match of matches) {
+    const slot = Number(match?.bracket_slot);
+    if (Number.isInteger(slot) && slot >= 0 && slot < slotCount && !placed[slot]) {
+      placed[slot] = match;
+      continue;
+    }
+
+    const fallbackSlot = placed.findIndex(item => item === null);
+    if (fallbackSlot !== -1) placed[fallbackSlot] = match;
+  }
+
+  return placed;
+}
+
 // ── Bracket canvas ────────────────────────────────────────────────────────────
 function BracketCanvas({ stages }) {
   const nodes = [];
 
   ROUNDS.forEach((round, rIdx) => {
-    const matches = stages[round.key] || [];
+    const matches = matchesBySlot(stages[round.key] || [], round.n);
 
     for (let i = 0; i < round.n; i++) {
-      const match = matches[i] ?? null;
+      const match = matches[i];
       const top   = cardTop(rIdx, i);
       const left  = rIdx * STEP;
 
