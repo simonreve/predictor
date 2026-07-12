@@ -54,11 +54,10 @@ function BonusRow({ q, match, isLocked, value, onChange }) {
     return ans;
   };
 
-  const correct = q.correct_answer;
-  const isCorrect = correct && value && (
-    q.type === 'country' ? value === correct :
-    q.type === 'yesno'   ? value === correct :
-    value.trim().toLowerCase() === correct.trim().toLowerCase()
+  const acceptedAnswers = q.correct_answers?.length ? q.correct_answers : (q.correct_answer ? [q.correct_answer] : []);
+  const correct = acceptedAnswers[0] || null;
+  const isCorrect = value && acceptedAnswers.some(answer =>
+    value.trim().toLowerCase() === answer.trim().toLowerCase()
   );
 
   return (
@@ -222,6 +221,7 @@ export default function MatchCard({ match, onPredictionSaved, scoringConfig }) {
   const openStatuses = ['SCHEDULED', 'TIMED'];
   const isLocked = new Date() >= new Date(match.kickoff_time) || !openStatuses.includes(match.status);
   const pred = match.my_prediction;
+  const standaloneBonusPoints = Number(match.my_bonus_points || 0);
 
   // Score prediction state
   const [homeInput, setHomeInput] = useState('');
@@ -399,21 +399,24 @@ export default function MatchCard({ match, onPredictionSaved, scoringConfig }) {
       )}
 
       {/* Points + accuracy for finished matches */}
-      {match.status === 'FINISHED' && pred && (
+      {match.status === 'FINISHED' && (pred || standaloneBonusPoints > 0) && (
         <div style={{ marginTop: 10, borderTop: '1px solid var(--border)', paddingTop: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <AccuracyBadge prediction={pred} match={match} />
-            {pred.home_score !== null && (
+            {pred && <AccuracyBadge prediction={pred} match={match} />}
+            {pred && pred.home_score !== null && (
               <span className="text-muted" style={{ fontSize: 13 }}>
                 Votre pronostic : {pred.home_score ?? '-'} – {pred.away_score ?? '-'}
               </span>
             )}
-            {pred.points_earned !== null && (
+            {!pred && standaloneBonusPoints > 0 && (
+              <span className="text-muted" style={{ fontSize: 13 }}>Bonus uniquement</span>
+            )}
+            {((pred && pred.points_earned !== null) || standaloneBonusPoints > 0) && (
               <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ fontWeight: 700, color: pred.points_earned > 0 ? 'var(--accent)' : 'var(--text-muted)' }}>
-                  {Math.round(pred.points_earned)} pts
+                <span style={{ fontWeight: 700, color: (pred?.points_earned || standaloneBonusPoints) > 0 ? 'var(--accent)' : 'var(--text-muted)' }}>
+                  {Math.round(pred?.points_earned ?? standaloneBonusPoints)} pts
                 </span>
-                <button
+                {pred && <button
                   onClick={() => setShowBreakdown(v => !v)}
                   style={{
                     width: 20, height: 20,
@@ -429,11 +432,11 @@ export default function MatchCard({ match, onPredictionSaved, scoringConfig }) {
                   title="Détail des points"
                 >
                   {showBreakdown ? '−' : '+'}
-                </button>
+                </button>}
               </div>
             )}
           </div>
-          {showBreakdown && <PointsBreakdown pred={pred} />}
+          {showBreakdown && pred && <PointsBreakdown pred={pred} />}
         </div>
       )}
     </div>

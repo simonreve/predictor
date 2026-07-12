@@ -84,16 +84,71 @@ router.post('/', requireAuth, async (req, res) => {
 router.get('/me', requireAuth, async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT p.*, m.home_team, m.away_team, m.kickoff_time, m.stage,
+      `SELECT p.id, p.user_id, m.id AS match_id, p.home_score, p.away_score,
+              p.bonus_prediction_type, p.bonus_prediction_value, p.submitted_at,
+              p.points_earned, p.score_raw_points, p.score_multiplier,
+              p.bonus_points_earned, p.score_breakdown,
+              m.home_team, m.away_team, m.kickoff_time, m.stage,
               m.status AS match_status, m.home_score AS match_home_score, m.away_score AS match_away_score,
-              m.home_team_code, m.away_team_code
-       FROM predictions p
-       JOIN matches m ON p.match_id = m.id
-       WHERE p.user_id = $1
+              m.home_team_code, m.away_team_code,
+              COALESCE(bonus.bonus_points, 0) AS computed_bonus_points
+       FROM matches m
+       LEFT JOIN predictions p ON p.match_id = m.id AND p.user_id = $1
+       LEFT JOIN LATERAL (
+         SELECT COALESCE(SUM(
+           CASE WHEN EXISTS (
+             SELECT 1
+             FROM unnest(
+               CASE
+                 WHEN COALESCE(array_length(bq.correct_answers, 1), 0) > 0
+                   THEN bq.correct_answers
+                 WHEN bq.correct_answer IS NOT NULL AND bq.correct_answer != ''
+                   THEN ARRAY[bq.correct_answer]::text[]
+                 ELSE ARRAY[]::text[]
+               END
+             ) accepted(answer)
+             WHERE LOWER(TRIM(accepted.answer)) = LOWER(TRIM(ba.answer))
+           )
+           THEN CASE bq.type WHEN 'player' THEN 5 WHEN 'yesno' THEN 2 ELSE 3 END
+           ELSE 0 END
+         ), 0) AS bonus_points
+         FROM bonus_answers ba
+         JOIN bonus_questions bq ON bq.id = ba.question_id
+         WHERE ba.user_id = $1 AND bq.match_id = m.id
+       ) bonus ON TRUE
+       WHERE p.id IS NOT NULL OR EXISTS (
+         SELECT 1
+         FROM bonus_answers ba
+         JOIN bonus_questions bq ON bq.id = ba.question_id
+         WHERE ba.user_id = $1 AND bq.match_id = m.id
+       )
        ORDER BY m.kickoff_time ASC`,
       [req.user.id]
     );
-    res.json(result.rows);
+    const predictions = result.rows.map(p => {
+      const computedBonus = Number(p.computed_bonus_points || 0);
+      if (p.id == null) {
+        return {
+          ...p,
+          bonus_points_earned: computedBonus,
+          points_earned: p.match_status === 'FINISHED' ? computedBonus : null,
+        };
+      }
+      if (p.points_earned == null) {
+        return {
+          ...p,
+          bonus_points_earned: computedBonus,
+          points_earned: p.match_status === 'FINISHED' ? computedBonus : null,
+        };
+      }
+      const scorePoints = Number(p.points_earned) - Number(p.bonus_points_earned || 0);
+      return {
+        ...p,
+        bonus_points_earned: computedBonus,
+        points_earned: scorePoints + computedBonus,
+      };
+    });
+    res.json(predictions);
   } catch (err) {
     console.error('My predictions error:', err);
     res.status(500).json({ error: 'Server error' });
@@ -117,17 +172,42 @@ router.get('/users', requireAuth, async (req, res) => {
 router.get('/compare/:userId', requireAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT p.match_id, p.home_score, p.away_score, p.points_earned,
+      `SELECT p.match_id, p.home_score, p.away_score, p.points_earned, p.bonus_points_earned,
+              COALESCE(bonus.bonus_points, 0) AS computed_bonus_points,
               m.home_team, m.away_team, m.home_team_code, m.away_team_code,
               m.kickoff_time, m.stage, m.status AS match_status,
               m.home_score AS match_home_score, m.away_score AS match_away_score
        FROM predictions p
        JOIN matches m ON m.id = p.match_id
+       LEFT JOIN LATERAL (
+         SELECT COALESCE(SUM(
+           CASE WHEN EXISTS (
+             SELECT 1
+             FROM unnest(
+               CASE
+                 WHEN COALESCE(array_length(bq.correct_answers, 1), 0) > 0 THEN bq.correct_answers
+                 WHEN bq.correct_answer IS NOT NULL AND bq.correct_answer != '' THEN ARRAY[bq.correct_answer]::text[]
+                 ELSE ARRAY[]::text[]
+               END
+             ) accepted(answer)
+             WHERE LOWER(TRIM(accepted.answer)) = LOWER(TRIM(ba.answer))
+           )
+           THEN CASE bq.type WHEN 'player' THEN 5 WHEN 'yesno' THEN 2 ELSE 3 END
+           ELSE 0 END
+         ), 0) AS bonus_points
+         FROM bonus_answers ba
+         JOIN bonus_questions bq ON bq.id = ba.question_id
+         WHERE ba.user_id = p.user_id AND bq.match_id = p.match_id
+       ) bonus ON TRUE
        WHERE p.user_id = $1
        ORDER BY m.kickoff_time ASC`,
       [req.params.userId]
     );
-    res.json(rows);
+    res.json(rows.map(p => {
+      if (p.points_earned == null) return p;
+      const scorePoints = Number(p.points_earned) - Number(p.bonus_points_earned || 0);
+      return { ...p, points_earned: scorePoints + Number(p.computed_bonus_points || 0) };
+    }));
   } catch (err) {
     console.error('Compare predictions error:', err);
     res.status(500).json({ error: 'Server error' });
@@ -144,14 +224,40 @@ router.get('/match/:matchId', requireAuth, async (req, res) => {
       return res.status(403).json({ error: 'Match not finished yet' });
     }
     const { rows } = await pool.query(
-      `SELECT p.home_score, p.away_score, p.points_earned, u.name AS user_name
+      `SELECT p.home_score, p.away_score, p.points_earned, p.bonus_points_earned,
+               COALESCE(bonus.bonus_points, 0) AS computed_bonus_points,
+               u.name AS user_name
        FROM predictions p
        JOIN users u ON u.id = p.user_id
+       LEFT JOIN LATERAL (
+         SELECT COALESCE(SUM(
+           CASE WHEN EXISTS (
+             SELECT 1
+             FROM unnest(
+               CASE
+                 WHEN COALESCE(array_length(bq.correct_answers, 1), 0) > 0 THEN bq.correct_answers
+                 WHEN bq.correct_answer IS NOT NULL AND bq.correct_answer != '' THEN ARRAY[bq.correct_answer]::text[]
+                 ELSE ARRAY[]::text[]
+               END
+             ) accepted(answer)
+             WHERE LOWER(TRIM(accepted.answer)) = LOWER(TRIM(ba.answer))
+           )
+           THEN CASE bq.type WHEN 'player' THEN 5 WHEN 'yesno' THEN 2 ELSE 3 END
+           ELSE 0 END
+         ), 0) AS bonus_points
+         FROM bonus_answers ba
+         JOIN bonus_questions bq ON bq.id = ba.question_id
+         WHERE ba.user_id = p.user_id AND bq.match_id = p.match_id
+       ) bonus ON TRUE
        WHERE p.match_id = $1
        ORDER BY p.points_earned DESC NULLS LAST, u.name ASC`,
       [req.params.matchId]
     );
-    res.json(rows);
+    res.json(rows.map(p => {
+      if (p.points_earned == null) return p;
+      const scorePoints = Number(p.points_earned) - Number(p.bonus_points_earned || 0);
+      return { ...p, points_earned: scorePoints + Number(p.computed_bonus_points || 0) };
+    }));
   } catch (err) {
     console.error('Match predictions error:', err);
     res.status(500).json({ error: 'Server error' });

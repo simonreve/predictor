@@ -48,11 +48,12 @@ After that, log in at http://localhost and use the Admin panel to create account
 
 ### 4. Make predictions
 
-Each match card now supports two picks:
-- the score prediction
-- one bonus prediction, either a country or a player
+Each match card supports:
+- an optional score prediction
+- zero or more bonus questions (`country`, `player`, or `yes/no`)
 
-For bonus predictions, choose the type in the match card and then select one of the two teams or type a player name.
+Bonus answers are saved independently from the score prediction. A player can therefore earn
+bonus points even when they did not submit a score for that match.
 
 ---
 
@@ -73,19 +74,48 @@ For bonus predictions, choose the type in the match card and then select one of 
 
 Changes take effect the next time points are recalculated (when a match finishes).
 
-The default formula is:
+The score-prediction formula is:
 ```
-final_points = raw_points × rarity_multiplier
+score_points = round(raw_points × rarity_multiplier × stage_multiplier)
+total_points = score_points + bonus_points
 
 raw_points =
-+5 if the predicted result category is correct
-+3 if the goal difference is correct and the match is not a draw
++7 if the predicted result category is correct
++3 if the goal difference is correct
 +3 if the total number of goals is correct
 
 rarity_multiplier = 1 + (1 - players_with_same_predicted_result / total_predictions_for_match)
 ```
 
-The rarity multiplier is based on the predicted result category only, not the exact score. A very common result stays close to 1, while a rare result approaches 2.
+The three raw-point checks apply only when the predicted outcome (home win, draw, or away win)
+is correct. Goal-difference points also apply to draws. The rarity multiplier is based on that
+outcome category only, not the exact score; it ranges from 1 to almost 2.
+
+Default stage multipliers are:
+
+| Stage | Multiplier |
+|---|---:|
+| Group Stage | 1 |
+| Round of 32 | 1.25 |
+| Round of 16 | 1.5 |
+| Quarter-Finals | 2 |
+| Semi-Finals | 3 |
+| Final | 4 |
+| Third Place | 2 |
+
+Bonus awards are added after both multipliers and are never multiplied:
+
+| Bonus type | Points |
+|---|---:|
+| Country | 3 |
+| Yes/No | 2 |
+| Player | 5 |
+
+Each correct bonus question is counted separately. Rankings derive bonus points directly from
+the submitted and accepted answers, so bonus points do not require a score prediction.
+
+The automatic bonus-answer AI job is temporarily disabled. Correct bonus answers must currently
+be validated from the Admin panel; its implementation remains in the repository for later repair.
 
 ---
 

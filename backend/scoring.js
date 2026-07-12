@@ -94,12 +94,32 @@ async function recalculateMatchPoints(matchId, result) {
     counts[String(getResultCategory(p.home_score, p.away_score))]++;
   }
 
-  // Fetch bonus points per user for this match in one query
+  // Derive bonus points from accepted answers instead of trusting the stored
+  // points_earned value. This counts every question and also repairs legacy
+  // answers that received a correct_answer without being graded afterwards.
   const { rows: bonusRows } = await pool.query(`
-    SELECT ba.user_id, COALESCE(SUM(ba.points_earned), 0) AS bonus_pts
+    SELECT ba.user_id,
+           COALESCE(SUM(
+             CASE WHEN
+               EXISTS (
+                 SELECT 1
+                 FROM unnest(
+                   CASE
+                     WHEN COALESCE(array_length(bq.correct_answers, 1), 0) > 0
+                       THEN bq.correct_answers
+                     WHEN bq.correct_answer IS NOT NULL AND bq.correct_answer != ''
+                       THEN ARRAY[bq.correct_answer]::text[]
+                     ELSE ARRAY[]::text[]
+                   END
+                 ) accepted(answer)
+                 WHERE LOWER(TRIM(accepted.answer)) = LOWER(TRIM(ba.answer))
+               )
+             THEN CASE bq.type WHEN 'player' THEN 5 WHEN 'yesno' THEN 2 ELSE 3 END
+             ELSE 0 END
+           ), 0) AS bonus_pts
     FROM bonus_answers ba
     JOIN bonus_questions bq ON bq.id = ba.question_id
-    WHERE bq.match_id = $1 AND ba.points_earned IS NOT NULL
+    WHERE bq.match_id = $1
     GROUP BY ba.user_id
   `, [matchId]);
   const bonusMap = {};

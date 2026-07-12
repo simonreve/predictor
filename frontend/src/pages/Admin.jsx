@@ -238,17 +238,17 @@ function ScoringTab() {
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10, marginBottom: 14 }}>
-            <MiniStat label="Correct result" value="+5" />
-            <MiniStat label="Goal difference" value="+3" />
-            <MiniStat label="Total goals" value="+3" />
+            <MiniStat label="Correct result" value={`+${values.points_result_correct ?? 7}`} />
+            <MiniStat label="Goal difference" value={`+${values.points_goal_diff ?? 3}`} />
+            <MiniStat label="Total goals" value={`+${values.points_total_goals ?? 3}`} />
             <MiniStat label="Rarity range" value="1x - 2x" />
           </div>
 
           <div style={{ padding: 14, borderRadius: 14, background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)' }}>
             <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>How it works</div>
             <div style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 14, lineHeight: 1.7, color: 'var(--text)' }}>
-              final_points = raw_points × rarity_multiplier<br />
-              raw_points = 5 + 3 + 3 from the three matching conditions<br />
+              score_points = round(raw_points × rarity_multiplier × stage_multiplier)<br />
+              total_points = score_points + bonus_points<br />
               rarity_multiplier = 1 + (1 - same_result_predictions / total_predictions)
             </div>
           </div>

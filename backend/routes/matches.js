@@ -27,8 +27,23 @@ router.get('/', requireAuth, async (req, res) => {
 
     // Fetch bonus questions + this user's answers in one query
     const bonusResult = await pool.query(
-      `SELECT bq.id, bq.match_id, bq.type, bq.question, bq.correct_answer,
-              ba.answer AS my_answer
+      `SELECT bq.id, bq.match_id, bq.type, bq.question, bq.correct_answer, bq.correct_answers,
+              ba.answer AS my_answer,
+              CASE WHEN ba.id IS NOT NULL AND EXISTS (
+                SELECT 1
+                FROM unnest(
+                  CASE
+                    WHEN COALESCE(array_length(bq.correct_answers, 1), 0) > 0
+                      THEN bq.correct_answers
+                    WHEN bq.correct_answer IS NOT NULL AND bq.correct_answer != ''
+                      THEN ARRAY[bq.correct_answer]::text[]
+                    ELSE ARRAY[]::text[]
+                  END
+                ) accepted(answer)
+                WHERE LOWER(TRIM(accepted.answer)) = LOWER(TRIM(ba.answer))
+              )
+              THEN CASE bq.type WHEN 'player' THEN 5 WHEN 'yesno' THEN 2 ELSE 3 END
+              ELSE 0 END AS my_points
        FROM bonus_questions bq
        LEFT JOIN bonus_answers ba ON ba.question_id = bq.id AND ba.user_id = $1
        ORDER BY bq.match_id, bq.created_at ASC`,
@@ -40,9 +55,11 @@ router.get('/', requireAuth, async (req, res) => {
     predsResult.rows.forEach(p => { predMap[p.match_id] = p; });
 
     const bonusMap = {};
+    const bonusPointsMap = {};
     bonusResult.rows.forEach(q => {
       if (!bonusMap[q.match_id]) bonusMap[q.match_id] = [];
       bonusMap[q.match_id].push(q);
+      bonusPointsMap[q.match_id] = (bonusPointsMap[q.match_id] || 0) + Number(q.my_points || 0);
     });
 
     // Fetch scoring config so the frontend can display correct per-component point values
@@ -56,11 +73,33 @@ router.get('/', requireAuth, async (req, res) => {
     };
 
     // Attach prediction + bonus questions to each match
-    const matches = matchesResult.rows.map(m => ({
-      ...m,
-      my_prediction:    predMap[m.id]  || null,
-      bonus_questions:  bonusMap[m.id] || [],
-    }));
+    const matches = matchesResult.rows.map(m => {
+      const storedPrediction = predMap[m.id] || null;
+      const computedBonusPoints = bonusPointsMap[m.id] || 0;
+      let prediction = storedPrediction;
+
+      if (storedPrediction?.points_earned != null) {
+        const scorePoints = Number(storedPrediction.points_earned) - Number(storedPrediction.bonus_points_earned || 0);
+        prediction = {
+          ...storedPrediction,
+          bonus_points_earned: computedBonusPoints,
+          points_earned: scorePoints + computedBonusPoints,
+        };
+      } else if (storedPrediction && m.status === 'FINISHED') {
+        prediction = {
+          ...storedPrediction,
+          bonus_points_earned: computedBonusPoints,
+          points_earned: computedBonusPoints,
+        };
+      }
+
+      return {
+        ...m,
+        my_prediction: prediction,
+        my_bonus_points: computedBonusPoints,
+        bonus_questions: bonusMap[m.id] || [],
+      };
+    });
 
     res.json({ matches, scoringConfig });
   } catch (err) {

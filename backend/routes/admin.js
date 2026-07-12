@@ -50,12 +50,42 @@ router.post('/users', async (req, res) => {
 router.get('/users', async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT u.id, u.name, u.is_admin, u.created_at,
-              COALESCE(SUM(p.points_earned), 0) as total_points,
-              COUNT(p.id) as total_predictions
+      `WITH prediction_totals AS (
+         SELECT user_id,
+                COALESCE(SUM(COALESCE(points_earned, 0) - COALESCE(bonus_points_earned, 0)), 0) AS score_points,
+                COUNT(id) AS total_predictions
+         FROM predictions
+         GROUP BY user_id
+       ), bonus_totals AS (
+         SELECT ba.user_id,
+                COALESCE(SUM(
+                  CASE WHEN EXISTS (
+                    SELECT 1
+                    FROM unnest(
+                      CASE
+                        WHEN COALESCE(array_length(bq.correct_answers, 1), 0) > 0
+                          THEN bq.correct_answers
+                        WHEN bq.correct_answer IS NOT NULL AND bq.correct_answer != ''
+                          THEN ARRAY[bq.correct_answer]::text[]
+                        ELSE ARRAY[]::text[]
+                      END
+                    ) accepted(answer)
+                    WHERE LOWER(TRIM(accepted.answer)) = LOWER(TRIM(ba.answer))
+                  )
+                  THEN CASE bq.type WHEN 'player' THEN 5 WHEN 'yesno' THEN 2 ELSE 3 END
+                  ELSE 0 END
+                ), 0) AS bonus_points
+         FROM bonus_answers ba
+         JOIN bonus_questions bq ON bq.id = ba.question_id
+         GROUP BY ba.user_id
+       )
+       SELECT u.id, u.name, u.is_admin, u.created_at,
+              COALESCE(pt.score_points, 0) + COALESCE(bt.bonus_points, 0) AS total_points,
+              COALESCE(pt.total_predictions, 0) AS total_predictions
        FROM users u
-       LEFT JOIN predictions p ON u.id = p.user_id
-       GROUP BY u.id ORDER BY u.created_at ASC`
+       LEFT JOIN prediction_totals pt ON u.id = pt.user_id
+       LEFT JOIN bonus_totals bt ON u.id = bt.user_id
+       ORDER BY u.created_at ASC`
     );
     res.json(result.rows);
   } catch (err) {

@@ -38,7 +38,7 @@ backend/
     standings.js
   jobs/
     syncScores.js       — Fetches live results from football API, triggers recalculation
-    runBonusAi.js       — Auto-grades bonus questions with OpenAI 1h after match ends
+    runBonusAi.js       — Retained AI bonus grader (currently disabled in index.js)
   middleware/auth.js    — JWT requireAuth / requireAdmin
 
 frontend/src/
@@ -56,7 +56,7 @@ frontend/src/
 
 **Formula** (implemented in `backend/scoring.js`):
 ```
-total = Math.round(score_raw_points × score_multiplier) + bonus_points_earned
+total = Math.round(score_raw_points × score_multiplier × stage_multiplier) + bonus_points_earned
 ```
 
 **`score_raw_points`** = sum of components that were correct:
@@ -71,6 +71,7 @@ total = Math.round(score_raw_points × score_multiplier) + bonus_points_earned
 Ranges from 1.0 (everyone predicted this result) to ~2.0 (only this user did).
 
 **`bonus_points_earned`** — sum of correctly-answered bonus questions for this match. Added flat after the multiplier (not multiplied).
+Each question is counted separately, and leaderboard bonus points do not require a score prediction.
 
 ### Scoring config
 
@@ -99,6 +100,7 @@ To add a column: `ALTER TABLE foo ADD COLUMN IF NOT EXISTS bar TYPE DEFAULT val;
 - `GET /api/matches` returns `{ matches: [...], scoringConfig: { pointsResult, pointsGoalDiff, pointsTotalGoals } }`
 - Each match has `my_prediction` (null if not submitted) with fields:
   `points_earned`, `score_raw_points`, `score_multiplier`, `bonus_points_earned`, `score_breakdown`
+- Each match also has `my_bonus_points`, including when the user submitted no score prediction.
 - All routes require JWT (`requireAuth`); admin routes additionally require `requireAdmin`
 
 ## Frontend conventions

@@ -19,6 +19,9 @@ function ResultBadge({ pred }) {
   if (pred.match_status !== 'FINISHED' || pred.points_earned === null) {
     return <span className="badge" style={{ background: 'rgba(139,143,168,0.15)', color: 'var(--text-muted)' }}>Pending</span>;
   }
+  if (pred.home_score == null || pred.away_score == null) {
+    return <span className="badge badge-blue">Bonus only</span>;
+  }
   const ph = pred.home_score, pa = pred.away_score;
   const mh = pred.match_home_score, ma = pred.match_away_score;
 
@@ -102,8 +105,15 @@ export default function MyPredictionsPage() {
   if (error) return <div className="page"><p style={{ color: 'var(--red)' }}>{error}</p></div>;
 
   const totalPts = predictions.reduce((s, p) => s + (parseFloat(p.points_earned) || 0), 0);
-  const correct = predictions.filter(p => p.points_earned > 0).length;
-  const finished = predictions.filter(p => p.match_status === 'FINISHED').length;
+  // A prediction is correct only when its win/draw/loss outcome is correct.
+  // Bonus points alone must not increase this counter.
+  const correct = predictions.filter(p =>
+    p.match_status === 'FINISHED' &&
+    p.home_score != null && p.away_score != null &&
+    Math.sign(p.home_score - p.away_score) === Math.sign(p.match_home_score - p.match_away_score)
+  ).length;
+  const scorePredictions = predictions.filter(p => p.home_score != null && p.away_score != null);
+  const finished = scorePredictions.filter(p => p.match_status === 'FINISHED').length;
 
   return (
     <div className="page">
@@ -113,7 +123,7 @@ export default function MyPredictionsPage() {
         <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
           <StatCard label="Total points" value={Math.round(totalPts)} color="var(--accent)" />
           <StatCard label="Correct" value={`${correct}/${finished}`} color="var(--green)" />
-          <StatCard label="Predictions" value={predictions.length} color="var(--text-muted)" />
+          <StatCard label="Predictions" value={scorePredictions.length} color="var(--text-muted)" />
         </div>
       )}
 
@@ -128,7 +138,7 @@ export default function MyPredictionsPage() {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {predictions.map(pred => (
-          <div key={pred.id} className="card">
+          <div key={pred.id ?? `bonus-${pred.match_id}`} className="card">
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
               {/* Match info */}
               <div style={{ flex: 1 }}>
@@ -149,7 +159,7 @@ export default function MyPredictionsPage() {
               {/* Scores: prediction vs result */}
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
                 <div style={{ fontWeight: 700, fontSize: 16 }}>
-                  {pred.home_score} – {pred.away_score}
+                  {pred.home_score != null && pred.away_score != null ? `${pred.home_score} – ${pred.away_score}` : 'No score'}
                 </div>
                 {pred.match_status === 'FINISHED' && (
                   <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>

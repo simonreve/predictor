@@ -10,6 +10,10 @@ const runMigrations = require('./db/migrate');
 const { runSync } = require('./jobs/syncScores');
 const { runBonusAi } = require('./jobs/runBonusAi');
 
+// Temporarily paused: keep the implementation available, but do not schedule it.
+// Bonus answers are validated manually from the admin panel for now.
+const BONUS_AI_ENABLED = false;
+
 const authRoutes = require('./routes/auth');
 const matchRoutes = require('./routes/matches');
 const predictionRoutes = require('./routes/predictions');
@@ -61,14 +65,16 @@ async function start() {
     }
   });
 
-  // Check every 5 minutes if any match finished 1h+ ago and has unanswered bonus questions
-  cron.schedule('*/5 * * * *', async () => {
-    try {
-      await runBonusAi();
-    } catch (err) {
-      console.error('Bonus AI job failed:', err.message);
-    }
-  });
+  if (BONUS_AI_ENABLED) {
+    // Check every 5 minutes if any match finished 1h+ ago and has unanswered bonus questions
+    cron.schedule('*/5 * * * *', async () => {
+      try {
+        await runBonusAi();
+      } catch (err) {
+        console.error('Bonus AI job failed:', err.message);
+      }
+    });
+  }
 
   // Also run a sync on startup so we have fresh data immediately
   console.log('Running initial score sync...');
